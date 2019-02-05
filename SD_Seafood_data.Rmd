@@ -104,9 +104,10 @@ head(shrimp.data)
 ```
 
 
-Comparison of shrimp price as a function of species, eco-label, origin, processing and condition.
+Comparison of shrimp price as a function of species, eco-label, origin, processing and condition. 
 ```{r}
-fit.1 <- lm(PRICE ~ SPECIES + SIZE_CLASS + ECOLABEL + COUNTRY + SHRIMP_PROCESSING + CONDITION, 
+#SPECIES + SIZE_CLASS + ECOLABEL + COUNTRY + SHRIMP_PROCESSING + CONDITION
+fit.1 <- lm(PRICE ~ CONDITION -1, 
             data = shrimp.data)
 
 
