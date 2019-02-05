@@ -1,0 +1,118 @@
+---
+title: "San Diego seafood market data manipulation"
+output: html_notebook
+---
+
+In this document, I try to manipulate the San Diego seafood market dataset. From the spreadsheet, I extracted the data and key into separate comma-delimited text files. I converted the price column from Accounting to Numbers - $-signs are not useful in analysis. 
+
+First bring in the necessary libraries.
+```{r}
+rm(list=ls())
+library(tidyverse)
+```
+
+
+Load the main file. Because we want to make sure all variables come in the correct format, we specify the columns first.
+```{r}
+col.def <- cols("YEAR" = col_integer(),
+                "MONTH" = col_integer(),
+                "DAY" = col_integer(),
+                "DATE" = col_date(format = "%m/%d/%y"),
+                "ZIP" = col_integer(),
+                "LATITUDE" = col_double(),
+                "LONGITUDE" = col_double(),
+                "MKT_NAME" = col_character(),
+                "MARKETNAME" = col_integer(),
+                "MARKETTYPE" = col_integer(),
+                "FULL_LABEL" = col_character(),
+                "COMMON_NAME" = col_character(),
+                "LENGTH_CM" = col_double(),
+                "FOODGRP" = col_character(),
+                "SPP_GROUP" = col_character(),
+                "DSPPGRP" = col_integer(),
+                "SPECIES" = col_character(),
+                "FAMILY" = col_character(),
+                "TL" = col_double(),
+                "K_YR" = col_double(),
+                "PRICE" = col_double(),
+                "DCOUNTRY" = col_integer(),
+                "COUNTRY" = col_character(),
+                "DCONDITION" = col_integer(),
+                "CONDITION" = col_character(),
+                "PRODUCT_TYPE" = col_character(),
+                "BRAND_NAME" = col_character(),
+                "PROD_METHOD" = col_integer(),
+                "KEYWORD" = col_character(),
+                "ECOLABEL" = col_character(),
+                "SFW_RATING" = col_integer(),
+                "WILD" = col_integer(),
+                "FARMED" = col_integer(),
+                "FRESH" = col_integer(),
+                "HVINVERT" = col_integer(),
+                "SHRIMP" = col_integer(),
+                "LOCAL" = col_integer(),
+                "LIVE" = col_integer(),
+                "SUSHI" = col_integer(),
+                "RESPONSIBLE" = col_integer(),
+                "MSC" = col_integer(),
+                "SUSTAINABLE" = col_integer(),
+                "MBA" = col_integer(),
+                "MBA_CARD" = col_integer(),
+                "MBA_APP" = col_integer(),
+                "BAP" = col_integer(),
+                "DBAPSTARS" = col_integer(),
+                "BAP_LEVEL" = col_character(),
+                "REGION" = col_character(),
+                "GEAR" = col_character(),
+                "SIZE_CLASS" = col_character(),
+                "SHRIMP_PROCESSING" = col_character(),
+                "DPROCCOUNTRY" = col_integer(),
+                "PROCESSING_COUNTRY" = col_character(),
+                "HACCP" = col_integer(),
+                "SIZE_GROUP" = col_character(),
+                "DOLPHIN_SAFE" = col_character(),
+                "OTHER_TEXT" = col_character(),
+                "GF" = col_character(),
+                "O3" = col_character(),
+                "NONGMO" = col_integer(),
+                "SUSTAIN-" = col_integer(),
+                "TRAC-" = col_integer(),
+                "USA STATE" = col_character())
+main.data <- read_csv(file = "data/SDSEAFOOD_Master_02042019_2.csv",
+                      col_types = col.def)
+
+```
+
+Then, bring in the keys:
+```{r}
+key_country <- read.csv(file = "data/SDSEAFOOD_KEY_DCOUNTRY_02012019_1.csv")
+key_condition <- read.csv(file = "data/SDSEAFOOD_KEY_DCONDITION_02012019_1.csv")
+key_food.grp <- read.csv(file = "data/SDSEAFOOD_KEY_DFOODGRP_02012019_1.csv")
+key_market.name <- read.csv(file = "data/SDSEAFOOD_KEY_DMARKETNAME_02012019_1.csv")
+key_market.type <- read.csv(file = "data/SDSEAFOOD_KEY_DMARKETTYPE_02012019_1.csv")
+key_MBA <- read.csv(file = "data/SDSEAFOOD_KEY_DMBA_X_02012019_1.csv")
+key_spp.grp <- read.csv(file = "data/SDSEAFOOD_KEY_DSPPGRP_02012019_1.csv")
+```
+
+These can be joined using dplyr commands. I dropped the FULL_LABEL column. 
+```{r}
+main.data %>% left_join(key_spp.grp, by = "DSPPGRP") %>% 
+  filter(SPP_GROUP == "SHRIMP") %>%
+  select(-FULL_LABEL )-> shrimp.data
+
+head(shrimp.data)
+```
+
+
+Comparison of shrimp price as a function of species, eco-label, origin, processing and condition.
+```{r}
+fit.1 <- lm(PRICE ~ SPECIES + SIZE_CLASS + ECOLABEL + COUNTRY + SHRIMP_PROCESSING + CONDITION, 
+            data = shrimp.data)
+
+
+summary(fit.1)
+```
+
+
+
+
