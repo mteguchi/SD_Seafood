@@ -103,16 +103,15 @@ main.data %>% left_join(key_spp.grp, by = "DSPPGRP") %>%
 head(shrimp.data)
 ```
 
+Because the original data file is large and we don't want to be loading it to the workspace everytime, I save this shrimp data in a separate file and use another script to do statistical analyses. 
 
-Comparison of shrimp price as a function of species, eco-label, origin, processing and condition. 
 ```{r}
-#SPECIES + SIZE_CLASS + ECOLABEL + COUNTRY + SHRIMP_PROCESSING + CONDITION
-fit.1 <- lm(PRICE ~ CONDITION -1, 
-            data = shrimp.data)
-
-
-summary(fit.1)
+saveRDS(shrimp.data, 
+        file = "RData/shrimp_data.rds")
 ```
+
+
+
 
 
 
