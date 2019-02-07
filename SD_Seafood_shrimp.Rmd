@@ -8,43 +8,122 @@ In this file, extracted data file from SD_Seafood_data.Rmd is used to analyze sh
 ```{r}
 rm(list=ls())
 library(tidyverse)
-shrimp.data <- readRDS(file = "RData/shrimp_data.rds")
-```
 
-The first objective of the analysis is to compare price of shrimp as a function of species, eco-label, origin, processing and condition. First, I look at these factors separately.
-
-```{r}
-#SPECIES
-fit.species <- lm(PRICE ~ SPECIES -1, 
-            data = shrimp.data)
-
-
-summary(fit.species)
-```
-
-Accoding to this analysis, shrimp price is affected by the species. We can take a look at this through a figure. 
-
-```{r}
 # define standard error function. 
 SE <- function(x, na.rm=FALSE) {
   if (na.rm) x <- na.omit(x)
   sqrt(var(x)/length(x))
 }
 
-shrimp.data %>% group_by(SPECIES) %>%
+shrimp.data <- readRDS(file = "RData/shrimp_data.rds") %>%
+  mutate(SIZE_GROUP = factor(SIZE_GROUP, 
+                             levels = c("Extra Colossal", "Colossal", 
+                                        "Extra Jumbo", "Jumbo",
+                                        "Extra Large", "Large",
+                                        "Medium", "Small",
+                                        "Extra Small", "Tiny")))
+```
+
+The first objective of the analysis is to compare price of shrimp as a function of species, eco-label, origin, processing and condition. First, I look at these factors separately.
+
+Looking at the mean price for each size class:
+```{r}
+shrimp.data %>% group_by(SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
-            n = n()) -> shrimp.species
+            n = n()) %>% 
+  na.omit() %>%
+  mutate(SIZE_GROUP = factor(SIZE_GROUP, 
+                             levels = c("Extra Colossal", "Colossal", 
+                                        "Extra Jumbo", "Jumbo",
+                                        "Extra Large", "Large",
+                                        "Medium", "Small",
+                                        "Extra Small", "Tiny"))) -> shrimp.size
+ggplot(data = shrimp.size) +
+  geom_bar(aes(x = SIZE_GROUP, y = mean),
+           stat = "identity") + 
+  geom_errorbar(aes(x = SIZE_GROUP,
+                    ymin = mean - SE, 
+                    ymax = mean + SE),
+                width = 0.2) + 
+  geom_text(aes(x = SIZE_GROUP, y = 1,
+                label = n),
+            color = "white") +   
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)")
+```
+
+
+
+```{r}
+shrimp.data %>% mutate(SPECIES = ifelse(is.na(SPECIES), 
+                          "NONE", SPECIES)) %>%
+  group_by(SPECIES, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+    na.omit() -> shrimp.species
+
 ggplot(data = shrimp.species) +
-  geom_bar(aes(x = SPECIES, y = mean),
+  # geom_point(aes(x = SPECIES, 
+  #                y = mean, 
+  #                color = SIZE_GROUP),
+  #            size = 3) + 
+  geom_bar(aes(x = SPECIES, 
+               y = mean),
            stat = "identity") + 
   geom_errorbar(aes(x = SPECIES,
                     ymin = mean - SE, 
                     ymax = mean + SE),
+                width = 0.2) +
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, y = 1,
+  #               label = n),
+  #           color = "white") + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)")
+  
+```
+
+Compare the price among species conditional on size:
+```{r}
+#SPECIES
+fit.species <- lm(PRICE ~ SPECIES : SIZE_GROUP - 1, 
+                  data = shrimp.data)
+
+
+summary(fit.species)
+
+```
+
+
+
+```{r}
+
+shrimp.data %>% mutate(ECOLABEL = ifelse(is.na(ECOLABEL), 
+                          "NONE", ECOLABEL)) %>%
+  group_by(ECOLABEL, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>% 
+  na.omit() -> shrimp.ecolabel
+
+ggplot(data = shrimp.ecolabel) +
+  #geom_point(aes(x = ECOLABEL, 
+  #               y = mean),
+  #           size = 3) + 
+  geom_bar(aes(x = ECOLABEL, y = mean),
+            stat = "identity") + 
+  geom_errorbar(aes(x = ECOLABEL,
+                    ymin = mean - SE, 
+                    ymax = mean + SE),
                 width = 0.2) + 
-  geom_text(aes(x = SPECIES, y = 1,
-                label = n),
-            color = "white") + 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = ECOLABEL, y = 1,
+  #               label = n),
+  #           color = "white") +   
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
         axis.title.x = element_blank()) + 
   labs(y = "Mean +/- SE ($)")
@@ -53,135 +132,128 @@ ggplot(data = shrimp.species) +
 
 ```{r}
 #ECOLABEL
-fit.ecolabel <- lm(PRICE ~ ECOLABEL -1, 
+fit.ecolabel <- lm(PRICE ~ ECOLABEL : SIZE_GROUP -1, 
                    data = shrimp.data)
 
 
 summary(fit.ecolabel)
-```
 
-Accoding to this analysis, shrimp price is affected by ecolabels. We can take a look at this through a figure. 
-
-```{r}
-
-shrimp.data %>% group_by(ECOLABEL) %>%
-  summarise(mean = mean(PRICE),
-            SE = SE(PRICE),
-            n = n()) -> shrimp.ecolabel
-ggplot(data = shrimp.ecolabel) +
-  geom_bar(aes(x = ECOLABEL, y = mean),
-           stat = "identity") + 
-  geom_errorbar(aes(x = ECOLABEL,
-                    ymin = mean - SE, 
-                    ymax = mean + SE),
-                width = 0.2) + 
-  geom_text(aes(x = ECOLABEL, y = 1,
-                label = n),
-            color = "white") +   
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
-        axis.title.x = element_blank()) + 
-  labs(y = "Mean +/- SE ($)")
-  
 ```
 
 ORIGIN:
-```{r}
-#ORIGIN
-fit.origin <- lm(PRICE ~ COUNTRY -1, 
-                   data = shrimp.data)
-
-
-summary(fit.origin)
-```
-
-Accoding to this analysis, shrimp price is affected by countries We can take a look at this through a figure. 
 
 ```{r}
 
-shrimp.data %>% group_by(COUNTRY) %>%
+shrimp.data %>% mutate(COUNTRY = ifelse(is.na(COUNTRY), 
+                          "NONE", COUNTRY)) %>% 
+  group_by(COUNTRY, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
-            n = n()) -> shrimp.country
+            n = n()) %>%
+  na.omit() -> shrimp.country
+
 ggplot(data = shrimp.country) +
+  # geom_point(aes(x = COUNTRY, 
+  #                y = mean, 
+  #                color = SIZE_GROUP),
+  #            size = 3) + 
   geom_bar(aes(x = COUNTRY, y = mean),
-           stat = "identity") + 
+           stat = "identity") +
   geom_errorbar(aes(x = COUNTRY,
                     ymin = mean - SE, 
                     ymax = mean + SE),
                 width = 0.2) + 
-  geom_text(aes(x = COUNTRY, y = 1,
-                label = n),
-            color = "white") + 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = COUNTRY, y = 1,
+  #               label = n),
+  #           color = "white") + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
         axis.title.x = element_blank()) + 
   labs(y = "Mean +/- SE ($)")
   
 ```
 
-PROCESSING:
+
 ```{r}
-#PROCESSING
-fit.processing <- lm(PRICE ~ SHRIMP_PROCESSING -1, 
+#ORIGINA
+fit.country <- lm(PRICE ~ COUNTRY : SIZE_GROUP -1, 
                    data = shrimp.data)
 
 
-summary(fit.processing)
-```
+summary(fit.country)
 
-Accoding to this analysis, shrimp price is affected by processing. We can take a look at this through a figure. 
+```
 
 ```{r}
 
-shrimp.data %>% group_by(SHRIMP_PROCESSING) %>%
+shrimp.data %>% mutate(SHRIMP_PROCESSING = ifelse(is.na(SHRIMP_PROCESSING), 
+                          "NONE", SHRIMP_PROCESSING)) %>%
+  group_by(SHRIMP_PROCESSING, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
-            n = n()) -> shrimp.processing
+            n = n()) %>%
+  na.omit() -> shrimp.processing
+
 ggplot(data = shrimp.processing) +
+  # geom_point(aes(x = SHRIMP_PROCESSING, 
+  #                y = mean, 
+  #                color = SIZE_GROUP),
+  #            size = 3)    +
   geom_bar(aes(x = SHRIMP_PROCESSING, y = mean),
-           stat = "identity") + 
+           stat = "identity") +
   geom_errorbar(aes(x = SHRIMP_PROCESSING,
                     ymin = mean - SE, 
                     ymax = mean + SE),
                 width = 0.2) + 
-  geom_text(aes(x = SHRIMP_PROCESSING, y = 1,
-                label = n),
-            color = "white") + 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = SHRIMP_PROCESSING, y = 1,
+  #               label = n),
+  #           color = "white") + 
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5),
         axis.title.x = element_blank()) + 
   labs(y = "Mean +/- SE ($)")
   
 ```
 
-
-CONDITION:
 ```{r}
-#CONDITION
-fit.condition <- lm(PRICE ~ CONDITION -1, 
+#PROCESSING
+fit.processing <- lm(PRICE ~ SHRIMP_PROCESSING : SIZE_GROUP -1, 
                    data = shrimp.data)
 
 
-summary(fit.condition)
+summary(fit.processing)
+
 ```
 
-Accoding to this analysis, shrimp price is affected by processing. We can take a look at this through a figure. 
+
+CONDITION:
 
 ```{r}
 
-shrimp.data %>% group_by(CONDITION) %>%
+shrimp.data %>% mutate(CONDITION = ifelse(is.na(CONDITION), 
+                          "NONE", CONDITION)) %>% 
+  group_by(CONDITION, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
-            n = n()) -> shrimp.condition
+            n = n()) %>%
+  na.omit() -> shrimp.condition
+
 ggplot(data = shrimp.condition) +
+  # geom_point(aes(x = CONDITION, 
+  #                y = mean, 
+  #                color = SIZE_GROUP),
+  #            size = 3) +   
   geom_bar(aes(x = CONDITION, y = mean),
            stat = "identity",
-           color = "black") + 
+           color = "black") +
   geom_errorbar(aes(x = CONDITION,
                     ymin = mean - SE, 
                     ymax = mean + SE),
                 width = 0.2) + 
-  geom_text(aes(x = CONDITION, y = 1,
-                label = n),
-            color = "white") + 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = CONDITION, y = 1,
+  #               label = n),
+  #           color = "white") + 
   theme(axis.text.x = element_text(angle = 90, 
                                    hjust = 1, 
                                    vjust = 0.5),
@@ -190,11 +262,20 @@ ggplot(data = shrimp.condition) +
   
 ```
 
+```{r}
+#CONDITION
+fit.condition <- lm(PRICE ~ CONDITION : SIZE_GROUP -1, 
+                   data = shrimp.data)
+
+
+summary(fit.condition)
+
+```
 
 All of these factors affect the shrimp price in San Diego markets. Are there some interacting factors? 
 
 ```{r}
-shrimp.data %>% group_by(SPECIES, ECOLABEL) %>%
+shrimp.data %>% group_by(SPECIES, ECOLABEL, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -204,13 +285,13 @@ shrimp.data %>% group_by(SPECIES, ECOLABEL) %>%
 ggplot(data = shrimp.sp.eco) + 
   geom_point(aes(x = SPECIES2, 
                 y = mean, 
-                color = ECOLABEL2),
-             size = 3) + 
+                color = ECOLABEL2)) + 
   geom_errorbar(aes(x = SPECIES2, 
                     ymin = mean - SE, 
                     ymax = mean + SE,
                     color = ECOLABEL2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -233,6 +314,7 @@ ggplot(data = shrimp.sp.eco) +
                     ymax = mean + SE,
                     color = SPECIES2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -246,7 +328,7 @@ ggplot(data = shrimp.sp.eco) +
 
 
 ```{r}
-shrimp.data %>% group_by(SPECIES, COUNTRY) %>%
+shrimp.data %>% group_by(SPECIES, COUNTRY, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -264,6 +346,7 @@ ggplot(data = shrimp.sp.country) +
                     ymax = mean + SE,
                     color = SPECIES2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -285,6 +368,7 @@ ggplot(data = shrimp.sp.country) +
                     ymax = mean + SE,
                     color = COUNTRY2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -297,7 +381,7 @@ ggplot(data = shrimp.sp.country) +
 
 
 ```{r}
-shrimp.data %>% group_by(ECOLABEL, COUNTRY) %>%
+shrimp.data %>% group_by(ECOLABEL, COUNTRY, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -316,6 +400,7 @@ ggplot(data = shrimp.eco.country) +
                     ymax = mean + SE,
                     color = ECOLABEL2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -337,6 +422,7 @@ ggplot(data = shrimp.eco.country) +
                     ymax = mean + SE,
                     color = COUNTRY2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -349,7 +435,7 @@ ggplot(data = shrimp.eco.country) +
 
 
 ```{r}
-shrimp.data %>% group_by(SPECIES, CONDITION) %>%
+shrimp.data %>% group_by(SPECIES, CONDITION, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -368,6 +454,7 @@ ggplot(data = shrimp.sp.condition) +
                     ymax = mean + SE,
                     color = CONDITION2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -389,6 +476,7 @@ ggplot(data = shrimp.sp.condition) +
                     ymax = mean + SE,
                     color = SPECIES2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -401,7 +489,7 @@ ggplot(data = shrimp.sp.condition) +
 
 
 ```{r}
-shrimp.data %>% group_by(ECOLABEL, CONDITION) %>%
+shrimp.data %>% group_by(ECOLABEL, CONDITION, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -420,6 +508,7 @@ ggplot(data = shrimp.eco.condition) +
                     ymax = mean + SE,
                     color = ECOLABEL2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -442,6 +531,7 @@ ggplot(data = shrimp.eco.condition) +
                     ymax = mean + SE,
                     color = CONDITION2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -454,7 +544,7 @@ ggplot(data = shrimp.eco.condition) +
 
 
 ```{r}
-shrimp.data %>% group_by(COUNTRY, CONDITION) %>%
+shrimp.data %>% group_by(COUNTRY, CONDITION, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -473,6 +563,7 @@ ggplot(data = shrimp.country.condition) +
                     ymax = mean + SE,
                     color = CONDITION2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -494,6 +585,7 @@ ggplot(data = shrimp.country.condition) +
                     ymax = mean + SE,
                     color = COUNTRY2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -506,7 +598,7 @@ ggplot(data = shrimp.country.condition) +
 
 
 ```{r}
-shrimp.data %>% group_by(SHRIMP_PROCESSING, CONDITION) %>%
+shrimp.data %>% group_by(SHRIMP_PROCESSING, CONDITION, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -525,6 +617,7 @@ ggplot(data = shrimp.proc.condition) +
                     ymax = mean + SE,
                     color = CONDITION2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -546,6 +639,7 @@ ggplot(data = shrimp.proc.condition) +
                     ymax = mean + SE,
                     color = PROCESSING2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -558,7 +652,7 @@ ggplot(data = shrimp.proc.condition) +
 
 
 ```{r}
-shrimp.data %>% group_by(SHRIMP_PROCESSING, ECOLABEL) %>%
+shrimp.data %>% group_by(SHRIMP_PROCESSING, ECOLABEL, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -577,6 +671,7 @@ ggplot(data = shrimp.proc.eco) +
                     ymax = mean + SE,
                     color = ECOLABEL2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -598,6 +693,7 @@ ggplot(data = shrimp.proc.eco) +
                     ymax = mean + SE,
                     color = PROCESSING2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -610,7 +706,7 @@ ggplot(data = shrimp.proc.eco) +
 
 
 ```{r}
-shrimp.data %>% group_by(SHRIMP_PROCESSING, SPECIES) %>%
+shrimp.data %>% group_by(SHRIMP_PROCESSING, SPECIES, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -629,6 +725,7 @@ ggplot(data = shrimp.proc.sp) +
                     ymax = mean + SE,
                     color = SPECIES2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -651,6 +748,7 @@ ggplot(data = shrimp.proc.sp) +
                     ymax = mean + SE,
                     color = PROCESSING2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -662,7 +760,7 @@ ggplot(data = shrimp.proc.sp) +
 ```
 
 ```{r}
-shrimp.data %>% group_by(SHRIMP_PROCESSING, COUNTRY) %>%
+shrimp.data %>% group_by(SHRIMP_PROCESSING, COUNTRY, SIZE_GROUP) %>%
   summarise(mean = mean(PRICE),
             SE = SE(PRICE),
             n = n()) %>%
@@ -681,6 +779,7 @@ ggplot(data = shrimp.proc.country) +
                     ymax = mean + SE,
                     color = COUNTRY2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -703,6 +802,7 @@ ggplot(data = shrimp.proc.country) +
                     ymax = mean + SE,
                     color = PROCESSING2),
                 width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
   # geom_text(aes(x = SPECIES, 
   #               y = 1,
   #               label = n)) + 
@@ -712,3 +812,93 @@ ggplot(data = shrimp.proc.country) +
         axis.title.x = element_blank()) + 
   labs(y = "Mean +/- SE ($)", title = "Processing vs. Country")
 ```
+
+6 February 2019:
+We know that price depends on size. We will need to control for that for all the comparisons. 
+
+{All plots have been converted to include the size group data.}
+
+The main comparison that we need to do is (3) from the previous email. 
+
+{i.e., analysis of variance for the price of shrimp as a function of species, size, eco-label, origin (country), processing and condition.}
+
+{THis is mainly done - see all the comparisons above. I looked at two factors at a time as it becomes almost impossible to interpret with more factors, especially with unbalanced factors... }
+
+
+Two specific things that I am also particularly interested in: 
+(a) Looking at the price point for the Mexican Fair Trade product (there's only one)
+
+(b) Looking at how the shrimp market in general, and the eco-labels in particular, have changed over time. 
+(c) getting this up and running on my computer!
+
+
+(a) Looking at the price point for the Mexican Fair Trade product (there's only one)
+```{r}
+shrimp.data %>% filter(ECOLABEL == "FAIR TRADE") -> shrimp.fair_trade
+
+summary(shrimp.fair_trade$PRICE)
+```
+
+```{r}
+ggplot(data = shrimp.fair_trade) + 
+  geom_histogram(aes(x = PRICE),
+                 color = "black")
+```
+
+
+(b) Looking at how the shrimp market in general, and the eco-labels in particular, have changed over time. Change in price over time
+```{r}
+shrimp.data %>% select(DATE, PRICE, ECOLABEL) %>%
+  mutate(time.length = lubridate::time_length(DATE - min(DATE), "years")) %>%
+  na.omit() -> shrimp.eco.date
+
+ggplot(data = shrimp.eco.date) + 
+  geom_point(aes(x = DATE, 
+                 y = PRICE,
+                 color = ECOLABEL))
+
+```
+
+Then a quick analysis on these:
+```{r}
+fit.eco.time <- lm(PRICE ~ time.length * ECOLABEL, data = shrimp.eco.date)
+summary(fit.eco.time)
+```
+
+A strong positive interaction relationship between days and LOCAL label, as we saw it in the plot.
+
+Extract the Local only and see what they look like:
+```{r}
+shrimp.eco.date %>% filter(ECOLABEL == "LOCAL") -> shrimp.local.date
+
+lm.local <- lm(PRICE ~ time.length, data = shrimp.local.date)
+
+predict.date <- seq(min(shrimp.local.date$DATE), max(shrimp.local.date$DATE), by = "10 day")
+
+predict.date.num <- data.frame(time.length = lubridate::time_length(predict.date - min(shrimp.local.date$DATE), "years"))
+
+local.predict <- predict(lm.local, 
+                         newdata = predict.date.num,
+                         se.fit = TRUE)
+
+predict.df <- data.frame(DATE = predict.date,
+                         predict = local.predict$fit,
+                         SE = local.predict$se.fit)
+
+ggplot() + 
+  geom_point(data = shrimp.local.date,
+             aes(x = DATE, y = PRICE),
+             size = 3) + 
+  geom_line(data = predict.df,
+            aes(x = DATE, y = predict)) + 
+  geom_line(data = predict.df,
+            aes(x = DATE, y = predict + 2 * SE),
+            color = "red") + 
+  geom_line(data = predict.df,
+            aes(x = DATE, y = predict - 2 * SE),
+            color = "red") 
+  
+
+```
+
+
