@@ -1,0 +1,543 @@
+These include interaction plots for SD_Seafood_shrimp.Rmd. May put them back in later. 
+
+
+All of these factors affect the shrimp price in San Diego markets. Are there some interacting factors? 
+
+```{r}
+shrimp.data %>% group_by(SPECIES, ECOLABEL, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(ECOLABEL2 = ifelse(is.na(ECOLABEL), "NONE", ECOLABEL),
+         SPECIES2 = ifelse(is.na(SPECIES), "NONE", SPECIES)) -> shrimp.sp.eco
+
+ggplot(data = shrimp.sp.eco) + 
+  geom_point(aes(x = SPECIES2, 
+                y = mean, 
+                color = ECOLABEL2)) + 
+  geom_errorbar(aes(x = SPECIES2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = ECOLABEL2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Species vs. Ecolabel")
+```
+
+
+```{r}
+ggplot(data = shrimp.sp.eco) + 
+  geom_point(aes(x = ECOLABEL2, 
+                y = mean, 
+                color = SPECIES2),
+             size = 3) + 
+  geom_errorbar(aes(x = ECOLABEL2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = SPECIES2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Species vs. Ecolabel")
+```
+
+
+
+```{r}
+shrimp.data %>% group_by(SPECIES, COUNTRY, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(COUNTRY2 = ifelse(is.na(COUNTRY), 
+                           "NONE", COUNTRY),
+         SPECIES2 = ifelse(is.na(SPECIES), "NONE", SPECIES)) -> shrimp.sp.country
+
+ggplot(data = shrimp.sp.country) + 
+  geom_point(aes(x = COUNTRY2, 
+                y = mean, 
+                color = SPECIES2),
+             size = 3) + 
+  geom_errorbar(aes(x = COUNTRY2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = SPECIES2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Country vs. Species")
+```
+
+```{r}
+ggplot(data = shrimp.sp.country) + 
+  geom_point(aes(x = SPECIES2, 
+                y = mean, 
+                color = COUNTRY2),
+             size = 3) + 
+  geom_errorbar(aes(x = SPECIES2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = COUNTRY2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Country vs. Species")
+```
+
+
+```{r}
+shrimp.data %>% group_by(ECOLABEL, COUNTRY, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(COUNTRY2 = ifelse(is.na(COUNTRY), 
+                           "NONE", COUNTRY),
+         ECOLABEL2 = ifelse(is.na(ECOLABEL),
+                            "NONE", ECOLABEL)) -> shrimp.eco.country
+
+ggplot(data = shrimp.eco.country) + 
+  geom_point(aes(x = COUNTRY2, 
+                y = mean, 
+                color = ECOLABEL2),
+             size = 3) + 
+  geom_errorbar(aes(x = COUNTRY2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = ECOLABEL2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Country vs. Ecolabel")
+```
+
+```{r}
+ggplot(data = shrimp.eco.country) + 
+  geom_point(aes(x = ECOLABEL2, 
+                y = mean, 
+                color = COUNTRY2),
+             size = 3) + 
+  geom_errorbar(aes(x = ECOLABEL2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = COUNTRY2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Country vs. Ecolabel")
+```
+
+
+```{r}
+shrimp.data %>% group_by(SPECIES, CONDITION, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(SPECIES2 = ifelse(is.na(SPECIES), 
+                           "NONE", SPECIES),
+         CONDITION2 = ifelse(is.na(CONDITION),
+                            "NONE", CONDITION)) -> shrimp.sp.condition
+
+ggplot(data = shrimp.sp.condition) + 
+  geom_point(aes(x = SPECIES2, 
+                y = mean, 
+                color = CONDITION2),
+             size = 3) + 
+  geom_errorbar(aes(x = SPECIES2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = CONDITION2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Species vs. Condition")
+```
+
+```{r}
+ggplot(data = shrimp.sp.condition) + 
+  geom_point(aes(x = CONDITION2, 
+                y = mean, 
+                color = SPECIES2),
+             size = 3) + 
+  geom_errorbar(aes(x = CONDITION2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = SPECIES2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) + 
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Species vs. Condition")
+```
+
+
+```{r}
+shrimp.data %>% group_by(ECOLABEL, CONDITION, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(ECOLABEL2 = ifelse(is.na(ECOLABEL), 
+                           "NONE", ECOLABEL),
+         CONDITION2 = ifelse(is.na(CONDITION),
+                            "NONE", CONDITION)) -> shrimp.eco.condition
+
+ggplot(data = shrimp.eco.condition) + 
+  geom_point(aes(x = CONDITION2, 
+                y = mean, 
+                color = ECOLABEL2),
+             size = 3) + 
+  geom_errorbar(aes(x = CONDITION2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = ECOLABEL2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Ecolabel vs. Condition")
+```
+
+
+```{r}
+ggplot(data = shrimp.eco.condition) + 
+  geom_point(aes(x = ECOLABEL2, 
+                y = mean, 
+                color = CONDITION2),
+             size = 3) + 
+  geom_errorbar(aes(x = ECOLABEL2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = CONDITION2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Ecolabel vs. Condition")
+```
+
+
+```{r}
+shrimp.data %>% group_by(COUNTRY, CONDITION, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(COUNTRY2 = ifelse(is.na(COUNTRY), 
+                           "NONE", COUNTRY),
+         CONDITION2 = ifelse(is.na(CONDITION),
+                            "NONE", CONDITION)) -> shrimp.country.condition
+
+ggplot(data = shrimp.country.condition) + 
+  geom_point(aes(x = COUNTRY2, 
+                y = mean, 
+                color = CONDITION2),
+             size = 3) + 
+  geom_errorbar(aes(x = COUNTRY2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = CONDITION2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Country vs. Condition")
+```
+
+```{r}
+ggplot(data = shrimp.country.condition) + 
+  geom_point(aes(x = CONDITION2, 
+                y = mean, 
+                color = COUNTRY2),
+             size = 3) + 
+  geom_errorbar(aes(x = CONDITION2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = COUNTRY2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Country vs. Condition")
+```
+
+
+```{r}
+shrimp.data %>% group_by(SHRIMP_PROCESSING, CONDITION, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(PROCESSING2 = ifelse(is.na(SHRIMP_PROCESSING), 
+                           "NONE", SHRIMP_PROCESSING),
+         CONDITION2 = ifelse(is.na(CONDITION),
+                            "NONE", CONDITION)) -> shrimp.proc.condition
+
+ggplot(data = shrimp.proc.condition) + 
+  geom_point(aes(x = PROCESSING2, 
+                y = mean, 
+                color = CONDITION2),
+             size = 3) + 
+  geom_errorbar(aes(x = PROCESSING2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = CONDITION2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Processing vs. Condition")
+```
+
+```{r}
+ggplot(data = shrimp.proc.condition) + 
+  geom_point(aes(x = CONDITION2, 
+                y = mean, 
+                color = PROCESSING2),
+             size = 3) + 
+  geom_errorbar(aes(x = CONDITION2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = PROCESSING2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Processing vs. Condition")
+```
+
+
+```{r}
+shrimp.data %>% group_by(SHRIMP_PROCESSING, ECOLABEL, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(PROCESSING2 = ifelse(is.na(SHRIMP_PROCESSING), 
+                           "NONE", SHRIMP_PROCESSING),
+         ECOLABEL2 = ifelse(is.na(ECOLABEL),
+                            "NONE", ECOLABEL)) -> shrimp.proc.eco
+
+ggplot(data = shrimp.proc.eco) + 
+  geom_point(aes(x = PROCESSING2, 
+                y = mean, 
+                color = ECOLABEL2),
+             size = 3) + 
+  geom_errorbar(aes(x = PROCESSING2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = ECOLABEL2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Processing vs. Ecolabel")
+```
+
+```{r}
+ggplot(data = shrimp.proc.eco) + 
+  geom_point(aes(x = ECOLABEL2, 
+                y = mean, 
+                color = PROCESSING2),
+             size = 3) + 
+  geom_errorbar(aes(x = ECOLABEL2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = PROCESSING2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Processing vs. Ecolabel")
+```
+
+
+```{r}
+shrimp.data %>% group_by(SHRIMP_PROCESSING, SPECIES, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(PROCESSING2 = ifelse(is.na(SHRIMP_PROCESSING), 
+                           "NONE", SHRIMP_PROCESSING),
+         SPECIES2 = ifelse(is.na(SPECIES),
+                            "NONE", SPECIES)) -> shrimp.proc.sp
+
+ggplot(data = shrimp.proc.sp) + 
+  geom_point(aes(x = PROCESSING2, 
+                y = mean, 
+                color = SPECIES2),
+             size = 3) + 
+  geom_errorbar(aes(x = PROCESSING2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = SPECIES2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Processing vs. Species")
+```
+
+
+```{r}
+ggplot(data = shrimp.proc.sp) + 
+  geom_point(aes(x = SPECIES2, 
+                y = mean, 
+                color = PROCESSING2),
+             size = 3) + 
+  geom_errorbar(aes(x = SPECIES2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = PROCESSING2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Processing vs. Species")
+```
+
+```{r}
+shrimp.data %>% group_by(SHRIMP_PROCESSING, COUNTRY, SIZE_GROUP) %>%
+  summarise(mean = mean(PRICE),
+            SE = SE(PRICE),
+            n = n()) %>%
+  mutate(PROCESSING2 = ifelse(is.na(SHRIMP_PROCESSING), 
+                           "NONE", SHRIMP_PROCESSING),
+         COUNTRY2 = ifelse(is.na(COUNTRY),
+                            "NONE", COUNTRY)) -> shrimp.proc.country
+
+ggplot(data = shrimp.proc.country) + 
+  geom_point(aes(x = PROCESSING2, 
+                y = mean, 
+                color = COUNTRY2),
+             size = 3) + 
+  geom_errorbar(aes(x = PROCESSING2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = COUNTRY2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP) +
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Processing vs. Country")
+```
+
+
+```{r}
+ggplot(data = shrimp.proc.country) + 
+  geom_point(aes(x = COUNTRY2, 
+                y = mean, 
+                color = PROCESSING2),
+             size = 3) + 
+  geom_errorbar(aes(x = COUNTRY2, 
+                    ymin = mean - SE, 
+                    ymax = mean + SE,
+                    color = PROCESSING2),
+                width = 0.2)+ 
+  facet_wrap(~SIZE_GROUP)+
+  # geom_text(aes(x = SPECIES, 
+  #               y = 1,
+  #               label = n)) + 
+  theme(axis.text.x = element_text(angle = 90, 
+                                   hjust = 1, 
+                                   vjust = 0.5),
+        axis.title.x = element_blank()) + 
+  labs(y = "Mean +/- SE ($)", title = "Processing vs. Country")
+```
