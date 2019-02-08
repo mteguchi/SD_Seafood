@@ -1,0 +1,43 @@
+---
+title: "Variable selection for shrimp data with c-RF"
+output: html_notebook
+---
+
+This notebook describes the variable selection process for predicting the price of shrimp from various predictors. 
+
+Load the libraries and data:
+```{r}
+rm(list=ls())
+library(tidyverse)
+library(party)
+
+# group Tiny and Extra Small together
+# Order the size group from tiny to extra colossal
+# group the species 
+# we ignore MBA for this analysis
+shrimp.data <- readRDS(file = "RData/shrimp_data.rds") %>%
+  mutate(SIZE_GROUP2 = case_when(SIZE_GROUP == "Extra Small" ~ "Tiny", 
+                                 TRUE ~ SIZE_GROUP)) %>%
+  mutate(SIZE_GROUP2 = factor(SIZE_GROUP2, 
+                              levels = c("Tiny", "Small",
+                                         "Medium", "Large", "Extra Large",
+                                         "Jumbo", "Extra Jumbo",
+                                         "Colossal", "Extra Colossal"))) %>%
+  mutate(SP_GROUP = case_when(grepl("penaeus", 
+                                    tolower(SPECIES)) |
+                                grepl("penaeid", 
+                                      tolower(SPECIES)) ~ "Penaeid",
+                              grepl("pandalus", 
+                                    tolower(SPECIES)) ~ "Pandelus",
+                              TRUE ~ "Other")) %>%
+  filter(ECOLABEL == "BAP" | ECOLABEL == "MSC" | 
+           ECOLABEL == "FAIR TRADE" | ECOLABEL == "MBAG" | 
+           ECOLABEL == "MBAY") %>%
+  
+  filter(PRICE < 95)
+
+# check to see if converted right
+shrimp.data%>%select(SPECIES, SP_GROUP, SIZE_GROUP2, SIZE_GROUP) %>%
+  filter(SIZE_GROUP == "Extra Colossal")->tmp
+```
+

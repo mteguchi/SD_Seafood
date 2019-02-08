@@ -17,17 +17,24 @@ SE <- function(x, na.rm=FALSE) {
 
 shrimp.data <- readRDS(file = "RData/shrimp_data.rds") %>%
   mutate(SIZE_GROUP = factor(SIZE_GROUP, 
-                             levels = c("Extra Colossal", "Colossal", 
-                                        "Extra Jumbo", "Jumbo",
-                                        "Extra Large", "Large",
-                                        "Medium", "Small",
-                                        "Extra Small", "Tiny")))
+                             levels = c("Tiny", "Extra Small", "Small",
+                                        "Medium", "Large", "Extra Large",
+                                        "Jumbo", "Extra Jumbo",
+                                        "Colossal", "Extra Colossal"))) %>%
+  filter(PRICE < 95)
 ```
 
 The first objective of the analysis is to compare price of shrimp as a function of species, eco-label, origin, processing and condition. First, I look at these factors separately.
 
+What factors affect the price most? 
+
+Use wild-farmed and size groups as main factors affecting the price.
+
+How does ecolabel affect the price?
+
 First, look at the distribution of PRICE. The usual assumption of linear models is that deviations from the mean are normally distributed. 
 ```{r}
+# find the distributions for each size class
 ggplot(data = shrimp.data) +
   geom_histogram(aes(x = PRICE),
                  color = "black",
@@ -52,17 +59,13 @@ shrimp.data %>% mutate(logPRICE = log(PRICE)) -> shrimp.data
 
 Looking at the mean price for each size class:
 ```{r}
+# possibly combine extra small and tiny
 shrimp.data %>% group_by(SIZE_GROUP) %>%
   summarise(mean = mean(logPRICE),
             SE = SE(logPRICE),
             n = n()) %>% 
-  na.omit() %>%
-  mutate(SIZE_GROUP = factor(SIZE_GROUP, 
-                             levels = c("Extra Colossal", "Colossal", 
-                                        "Extra Jumbo", "Jumbo",
-                                        "Extra Large", "Large",
-                                        "Medium", "Small",
-                                        "Extra Small", "Tiny"))) -> shrimp.size
+  na.omit() -> shrimp.size
+
 ggplot(data = shrimp.size) +
   geom_bar(aes(x = SIZE_GROUP, y = mean),
            stat = "identity") + 
@@ -84,8 +87,9 @@ All subsequent analyses wil include SIZE_GROUP as a factor.
 
 SPECIES:
 ```{r}
+# all species and just Penaeid spp. 
 shrimp.data %>% mutate(SPECIES = ifelse(is.na(SPECIES), 
-                          "NONE", SPECIES)) %>%
+                                        "NONE", SPECIES)) %>%
   group_by(SPECIES, SIZE_GROUP) %>%
   summarise(mean = mean(logPRICE),
             SE = SE(logPRICE),
@@ -162,6 +166,7 @@ ggplot(data = shrimp.ecolabel) +
 Again, the missing data points make these comparison difficult. One possible comparison is whether or not an ecolabel is on by grouping all ecolabes togehter and compare it against "none." One curious result in this plot is that MBA certified "Tiny" shrimp are priced higher than others - about the same price as a lot larger ones. In fact, the MBA certified shrimp seems to be about the same price for all size classes. Looking into this more closely...
 
 ```{r}
+# Take out MBA-tiny combo because they are canned products
 shrimp.data %>% filter(ECOLABEL == "MBA" | ECOLABEL == "MBAG" | ECOLABEL == "MBAY") %>%
   select(PRICE, logPRICE, ECOLABEL, SIZE_GROUP) %>%
   mutate(ECOLABEL = factor(ECOLABEL, 
@@ -199,7 +204,7 @@ Interesting to find that MBAG is lower for the two size groups than MBAY. The ti
 ORIGIN:
 
 ```{r}
-
+# pay attention to Mexico
 shrimp.data %>% mutate(COUNTRY = ifelse(is.na(COUNTRY), 
                           "NONE", COUNTRY)) %>% 
   group_by(COUNTRY, SIZE_GROUP) %>%
@@ -288,7 +293,7 @@ The same issue here - maybe to pool size groups and processing?
 CONDITION:
 
 ```{r}
-
+# Do not use condition
 shrimp.data %>% mutate(CONDITION = ifelse(is.na(CONDITION), 
                           "NONE", CONDITION)) %>% 
   group_by(CONDITION, SIZE_GROUP) %>%
@@ -411,7 +416,7 @@ predict.df <- data.frame(DATE = predict.date,
 
 ggplot() + 
   geom_point(data = shrimp.local.date,
-             aes(x = DATE, y = PRICE),
+             aes(x = DATE, y = PRICE, color = SIZE_GROUP),
              size = 3) + 
   geom_line(data = predict.df,
             aes(x = DATE, y = predict)) + 
@@ -432,4 +437,6 @@ summary(lm.local)
 
 Yes - there is a positive linear relationship; for the products with "LOCAL" labels, the average price increased over time (~ $3/yr). 
 
+
+Bubble plots with wild vs farmed and price on y axis and each country and size of eahc bubble is # observations. 
 
