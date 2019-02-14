@@ -15,7 +15,8 @@ library(party)
 # Order the size group from tiny to extra colossal
 # group the species 
 # we ignore MBA for this analysis
-shrimp.data <- readRDS(file = "RData/shrimp_data.rds") %>%
+shrimp.data.raw <- readRDS(file = "RData/shrimp_data.rds")
+shrimp.data.raw %>%
   mutate(SIZE_GROUP2 = case_when(SIZE_GROUP == "Extra Small" ~ "Tiny", 
                                  TRUE ~ SIZE_GROUP)) %>%
   mutate(SIZE_GROUP2 = factor(SIZE_GROUP2, 
@@ -30,14 +31,52 @@ shrimp.data <- readRDS(file = "RData/shrimp_data.rds") %>%
                               grepl("pandalus", 
                                     tolower(SPECIES)) ~ "Pandelus",
                               TRUE ~ "Other")) %>%
-  filter(ECOLABEL == "BAP" | ECOLABEL == "MSC" | 
-           ECOLABEL == "FAIR TRADE" | ECOLABEL == "MBAG" | 
-           ECOLABEL == "MBAY") %>%
+  mutate(ECOLABEL2 = case_when(ECOLABEL == NA_character_ ~ "NONE",
+                               TRUE ~ ECOLABEL)) %>%
+  filter(ECOLABEL2 == "BAP" | 
+           ECOLABEL2 == "MSC" | 
+           ECOLABEL2 == "FAIR TRADE" | 
+           ECOLABEL2 == "MBAG" | 
+           ECOLABEL2 == "MBAY" | 
+           ECOLABEL2 == "NONE") %>%
+  mutate(SHRIMP_PROCESSING2 = case_when(SHRIMP_PROCESSING == "FZ BRD TON"  ~ "BREADED", 
+                                        SHRIMP_PROCESSING == "FZ BRD TOFF" ~ "BREADED",
+                                        SHRIMP_PROCESSING == "CKD" ~ "COOKED", 
+                                        SHRIMP_PROCESSING == "CKD HL" ~ "COOKED",
+                                        SHRIMP_PROCESSING == "CKD HO" ~ "COOKED", 
+                                        SHRIMP_PROCESSING == "CKD TOFF" ~ "COOKED",
+                                        SHRIMP_PROCESSING == "CKD TON" ~ "COOKED", 
+                                        SHRIMP_PROCESSING == "FZ CKD HL" ~ "COOKED",
+                                        SHRIMP_PROCESSING == "FZ CKD HO" ~ "COOKED",
+                                        SHRIMP_PROCESSING == "FZ BLK HL" ~ "HEADLESS_RAW", 
+                                        SHRIMP_PROCESSING == "FZ HL" ~ "HEADLESS_RAW",
+                                        SHRIMP_PROCESSING == "HL" ~ "HEADLESS_RAW",
+                                        SHRIMP_PROCESSING == "FZ BLK TON" ~ "HEADLESS_RAW", 
+                                        SHRIMP_PROCESSING == "FZ BLK TOFF" ~ "HEADLESS_RAW",
+                                        SHRIMP_PROCESSING == "FZ CKD TON" ~ "HEADLESS_RAW",
+                                        SHRIMP_PROCESSING == "FZ CKD TOFF" ~ "HEADLESS_RAW",
+                                        SHRIMP_PROCESSING == "FZ TON" ~ "HEADLESS_RAW", 
+                                        SHRIMP_PROCESSING == "FZ TOFF" ~ "HEADLESS_RAW",
+                                        SHRIMP_PROCESSING == "TOFF" ~ "HEADLESS_RAW", 
+                                        SHRIMP_PROCESSING == "TON" ~ "HEADLESS_RAW",
+                                        SHRIMP_PROCESSING == "FZ BLK HO" ~ "WHOLE_RAW", 
+                                        SHRIMP_PROCESSING == "FZ HO" ~ "WHOLE_RAW",
+                                        SHRIMP_PROCESSING == "HO" ~ "WHOLE_RAW", 
+                                        SHRIMP_PROCESSING == "LIVE" ~ "WHOLE_RAW",
+                                        TRUE ~ SHRIMP_PROCESSING)) %>%
   
-  filter(PRICE < 95)
+  filter(PRICE < 95) -> shrimp.data
 
 # check to see if converted right
-shrimp.data%>%select(SPECIES, SP_GROUP, SIZE_GROUP2, SIZE_GROUP) %>%
-  filter(SIZE_GROUP == "Extra Colossal")->tmp
+shrimp.data%>%select(SPECIES, SP_GROUP, SIZE_GROUP2, SIZE_GROUP, 
+                     SHRIMP_PROCESSING, SHRIMP_PROCESSING2) %>%
+  filter(SHRIMP_PROCESSING == "CKD TON") -> tmp
+  #filter(SIZE_GROUP == "Extra Colossal")->tmp
+```
+
+To use Random Forests, I convert some categorical variables to ordinal variables, such as size group. 
+
+```{r}
+shrimp.data %>% 
 ```
 
