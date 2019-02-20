@@ -10,6 +10,9 @@ Load the libraries and data and convert some categorical variables to ordinal va
 rm(list=ls())
 library(tidyverse)
 library(party)
+library(rfPermute)
+
+ntree <- 5000
 
 # group Tiny and Extra Small together
 # Order the size group from tiny to extra colossal
@@ -17,6 +20,7 @@ library(party)
 # we ignore MBA for this analysis
 shrimp.data.raw <- readRDS(file = "RData/shrimp_data.rds")
 shrimp.data.raw %>%
+  mutate(SIZE_GROUP_f = as.factor(SIZE_GROUP)) %>%
   mutate(SIZE_GROUP2 = case_when(SIZE_GROUP == "Extra Small" ~ "Tiny", 
                                  TRUE ~ SIZE_GROUP)) %>%
   mutate(SIZE_GROUP2 = factor(SIZE_GROUP2, 
@@ -28,12 +32,12 @@ shrimp.data.raw %>%
                                     SIZE_GROUP2 == "Small" ~ 2,
                                     SIZE_GROUP2 == "Medium" ~ 3,
                                     SIZE_GROUP2 == "Large" ~ 4,
-                                    SIZE_GROUP2 == "Extra large" ~ 5,
+                                    SIZE_GROUP2 == "Extra Large" ~ 5,
                                     SIZE_GROUP2 == "Jumbo" ~ 6,
                                     SIZE_GROUP2 == "Extra Jumbo" ~ 7,
                                     SIZE_GROUP2 == "Colossal" ~ 8,
                                     SIZE_GROUP2 == "Extra Colossal" ~ 9,
-                                    TRUE ~ NA_integer_)) %>%
+                                    TRUE ~ NA_real_)) %>%
   mutate(SP_GROUP = case_when(grepl("penaeus", 
                                     tolower(SPECIES)) |
                                 grepl("penaeid", 
@@ -44,7 +48,7 @@ shrimp.data.raw %>%
   mutate(SP_GROUP_NUM = case_when(SP_GROUP == "Penaeid" ~ 1,
                                   SP_GROUP == "Pandelus" ~ 2,
                                   SP_GROUP == "Other" ~ 3,
-                                  TRUE ~ NA_integer_)) %>%
+                                  TRUE ~ NA_real_)) %>%
   mutate(ECOLABEL2 = case_when(is.na(ECOLABEL) ~ "NONE",
                                TRUE ~ ECOLABEL)) %>%
   filter(ECOLABEL2 == "BAP" | 
@@ -81,20 +85,114 @@ shrimp.data.raw %>%
                                            SHRIMP_PROCESSING2 == "COOKED" ~ 2,
                                            SHRIMP_PROCESSING2 == "HEADLESS_RAW" ~ 3,
                                            SHRIMP_PROCESSING2 == "WHOLE_RAW" ~ 4,
-                                           TRUE ~ NA_integer_)) %>%
+                                           TRUE ~ NA_real_)) %>%
   filter(PRICE < 95) -> shrimp.data
 
 # check to see if converted right
-shrimp.data %>% select(SPECIES, SP_GROUP, SIZE_GROUP2, SIZE_GROUP, 
-                     SHRIMP_PROCESSING, SHRIMP_PROCESSING2,
-                     ECOLABEL, ECOLABEL2) %>%
-  filter(SHRIMP_PROCESSING == "CKD TON") -> tmp
-  #filter(SIZE_GROUP == "Extra Colossal")->tmp
+shrimp.data %>% select(SPECIES, SP_GROUP, 
+                       SIZE_GROUP2, SIZE_GROUP, SIZE_GROUP_NUM,
+                       SHRIMP_PROCESSING, SHRIMP_PROCESSING_NUM,
+                       ECOLABEL, ECOLABEL2) %>%
+  #filter(SHRIMP_PROCESSING == "CKD TON") -> tmp
+  filter(SIZE_GROUP == "Extra Large")->tmp
+  #filter(is.na(SIZE_GROUP))-> tmp
 ```
 
 I didn't convert the ecolabel field to numerical values because they are depending on the products, such as BAP is only for aquacultured products. But... it may not make difference when we pool all these products as a group and not have wild-aquacultured separations. Hmmm... 
 
 ```{r}
+shrimp.data %>% select(SP_GROUP, SP_GROUP_NUM,
+                       SIZE_GROUP, SIZE_GROUP_NUM,
+                       SHRIMP_PROCESSING, SHRIMP_PROCESSING_NUM,
+                       YEAR, ZIP, MARKETTYPE, PRICE,
+                       ECOLABEL2) %>% 
+  mutate(ECOLABEL2_f = as.factor(ECOLABEL2),
+         RV = runif(nrow(shrimp.data), 
+                           min = 0, 
+                           max = 100)) -> shrimp.data.RF
+
+M.1 <- as.formula("PRICE ~ SP_GROUP_NUM+
+                       SIZE_GROUP_NUM +
+                       SHRIMP_PROCESSING_NUM +
+                       YEAR + ZIP + MARKETTYPE +
+                       ECOLABEL2_f + RV")
+
+p <- length(attr(terms(M.1), "term.labels"))
+# floor(sqrt(p)) and try half and 2x that
+#mtry <- floor(sqrt(p)/2)
+mtry <- floor(sqrt(p))
+  
+if (!file.exists("RData/RF_M_1_out.rds")){
+  RF.M.1 <- cforest(formula = M.1,
+                    data = shrimp.data.RF,
+                    control = cforest_unbiased(ntree = ntree,
+                                               mtry = mtry,
+                                               trace = 500))
+  saveRDS(RF.M.1, file = "RData/RF_M_1_out.rds")
+  
+} else {
+  RF.M.1 <- readRDS("RData/RF_M_1_out.rds")
+}
+
+```
+
+Find the variable importance:
+```{r}
+if (!file.exists("RData/RF_M_1_varImp.rds")){
+  var.imp <- sort(varimp(RF.M.1), decreasing = FALSE)
+  saveRDS(var.imp, file = "RData/RF_M_1_varImp.rds")
+} else {
+  var.imp <- readRDS("RData/RF_M_1_varImp.rds")
+}
+
+if (!file.exists("RData/RF_M_1_predict.rds")){
+  pred.RF.M.1 <- predict(RF.M.1, newdata = NULL)
+  saveRDS(pred.RF.M.1, file = "RData/RF_M_1_predict.rds")
+} else {
+  pred.RF.M.1 <- readRDS("RData/RF_M_1_predict.rds")
+}
+```
+
+Look at the variable importance:
+```{r}
+var.imp.df <- data.frame(var.imp)
+var.imp.df$Variable <- rownames(var.imp.df)
+
+ggplot(data = var.imp.df) + 
+  geom_point(aes(x = var.imp, y = reorder(Variable, var.imp)),
+             size = 3) + 
+  theme_bw() + 
+  labs(x = "Variable importance") + 
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_text(size =12))
+```
+
+This plot indicates that size groups affect the prediction of price the most. Zipcode affects more than ecolabels. Interesting!  
+
+Let's use another method to see how that comes out.
+```{r}
+
+if (!file.exists("RData/RFpermute_M_1.rds")){
+  var.imp.rfPermute <- rfPermute(formula = M.1,
+                                 data = shrimp.data.RF,
+                                 ntree = ntree)
+  saveRDS(var.imp.rfPermute, file = "RData/RFpermute_M_1.rds")
+} else {
+  var.imp.rfPermute <- readRDS(file = "RData/RFpermute_M_1.rds")
+  
+}
+
+
+```
+
+
+
+Compare the data and predictions:
+
+```{r}
+shrimp.data.RF$PREDICTED <- pred.RF.M.1[,1]
+ggplot(data = shrimp.data.RF) +
+  geom_point(aes(x = PRICE, y = PREDICTED))
 
 ```
 
