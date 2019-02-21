@@ -1,11 +1,13 @@
 ---
-title: "Variable selection for shrimp data with c-RF"
+title: "Variable selection for shrimp data with conditional random forest"
 output: html_notebook
 ---
 
-This notebook describes the variable selection process for predicting the price of shrimp from various predictors. 
+This notebook describes the variable selection process for predicting the price of shrimp from various predictors using conditional random forest (cRF). This approach of regression tree and bagging procedure is different from the original random forest in the way it selects variables.  Variable selection statistics for each variable is calculated conditional on other variables. This apparently is more robust to correlated variables.  
 
-Load the libraries and data and convert some categorical variables to ordinal variables, such as size group. 
+The conditional random forest approach is used to select variables that are most useful in predicting the price of shrimp. Then the relationships between each of the selected variables and price are examined. 
+
+In the next section, I converted categorical variables into integer variables.  This was unnecessary but easier to deal with than having named categories.  
 ```{r}
 rm(list=ls())
 library(tidyverse)
@@ -98,7 +100,7 @@ shrimp.data %>% select(SPECIES, SP_GROUP,
   #filter(is.na(SIZE_GROUP))-> tmp
 ```
 
-I didn't convert the ecolabel field to numerical values because they are depending on the products, such as BAP is only for aquacultured products. But... it may not make difference when we pool all these products as a group and not have wild-aquacultured separations. Hmmm... 
+We may include more variables in the next attempt but I thought this may be a good place to start.  Here I further change the variables into factor variables as the numbers don't mean much for these variables. I also added a variable of random numbers (RV) as a yardstick to which all variables are compared. If a variable is less useful than random numbers for predicing the price, they are not very useful. 
 
 ```{r}
 shrimp.data %>% select(SP_GROUP, SP_GROUP_NUM,
@@ -172,7 +174,7 @@ ggplot(data = var.imp.df) +
         axis.title.x = element_text(size =12))
 ```
 
-The variable importance metric is the mean difference in MSEs between OOB predictions and those from one variable permuted. The mean is computed from all trees and the mean divided by the standard deviation of the differences. 
+The variable importance metric is the mean difference in MSEs between out-of-bag (OOB) predictions and those from one variable permuted. The mean is computed from all trees and the mean divided by the standard deviation of the differences. 
 
 This plot indicates that size groups affect the prediction of price the most. Zipcode affects more than ecolabels. Interesting!  
 
@@ -194,4 +196,5 @@ p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
 # The scale option doesn't seem to do anything... 
 ```
 
-The first one (SIZE_GROUP) is the same as the other method (cforest) but the second one (MARKETTYPE) was not the same. But the top three are still the same: SIZE_GROUP, MARKETTYPE, and SHRIMP_PROCESSING. 
+The first one (SIZE_GROUP) is the same as the other method (cforest) but the second one (MARKETTYPE) was not the same. But the top three are still the same: SIZE_GROUP, MARKETTYPE, and SHRIMP_PROCESSING. Interestingly, Ecolabel is not very important. 
+
