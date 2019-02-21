@@ -16,7 +16,7 @@ library(rfPermute)
 library(randomForestExplainer)
 
 ntree <- 5000
-
+shrimp.data.raw <- readRDS(file = "RData/shrimp_data.rds")
 shrimp.data <- shrimp.data.fcn(shrimp.data.raw)
 # add wild vs. aquaculture
 # then look just one at a time.
