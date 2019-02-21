@@ -164,6 +164,8 @@ if (!file.exists("RData/cRF_M_1_predict.rds")){
 } else {
   pred.cRF.M.1 <- readRDS("RData/cRF_M_1_predict.rds")
 }
+
+shrimp.data.RF$PREDICT <- pred.cRF.M.1
 ```
 
 Look at the variable importance:
@@ -184,6 +186,54 @@ ggplot(data = var.imp.cRF.df) +
 The variable importance metric is the mean difference in MSEs between out-of-bag (OOB) predictions and those from one variable permuted. The mean is computed from all trees and the mean divided by the standard deviation of the differences. 
 
 This plot indicates that size groups affect the prediction of price the most. Zipcode affects more than ecolabels. Interesting!  
+
+
+
+```{r}
+ggplot(data = shrimp.data.RF) + 
+  geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
+  scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
+                   labels = c("Tiny", "Small", "Medium", "Large", 
+                              "Extra Large", "Jumbo", "Extra Jumbo", 
+                              "Colossal", "Extra Collossal")) + 
+  labs(x = "") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+
+```{r}
+shrimp.data.RF %>% group_by(ZIP_f) %>%
+  summarise(mean_by_ZIP = mean(PREDICT))-> mean.PRICE.by.ZIP
+
+ggplot(data = mean.PRICE.by.ZIP) + 
+  geom_point(aes(x = reorder(ZIP_f, mean_by_ZIP),
+                 y = mean_by_ZIP),
+             size = 3) +
+  labs(x = "") +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1))
+  
+
+```
+
+```{r}
+zip.order <- reorder(mean.PRICE.by.ZIP$ZIP_f, 
+                     mean.PRICE.by.ZIP$mean_by_ZIP)
+
+shrimp.data.RF$ZIP_ordered <- factor(shrimp.data.RF$ZIP_f,
+                                     ordered = TRUE,
+                                     levels = levels(zip.order))
+ggplot(data = shrimp.data.RF) + 
+  geom_boxplot(aes(x = ZIP_ordered, 
+                   y = PREDICT)) + 
+  labs(x = "") +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1)) 
+  scale_x_discrete(levels = zip.order)
+```
+
+
 
 Just to compare results, I also use the original random forest. The packages (randomForest) should have been loaded by rfPermute package. This should be in the rfPermute output but doesn't seem to work... need to look into it. 
 ```{r}
@@ -223,18 +273,18 @@ It's interesting that Zip code became a lot important than before...
 Let's use another method to see how that comes out.
 ```{r}
 
-if (!file.exists("RData/RFpermute_M_1.rds")){
-  var.imp.rfPermute <- rfPermute(formula = M.1,
-                                 data = shrimp.data.RF,
-                                 ntree = ntree)
-  #,num.cores = 1
-  saveRDS(var.imp.rfPermute, file = "RData/RFpermute_M_1.rds")
-} else {
-  var.imp.rfPermute <- readRDS(file = "RData/RFpermute_M_1.rds")
-  
-}
-
-p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
+# if (!file.exists("RData/RFpermute_M_1.rds")){
+#   var.imp.rfPermute <- rfPermute(formula = M.1,
+#                                  data = shrimp.data.RF,
+#                                  ntree = ntree)
+#   #,num.cores = 1
+#   saveRDS(var.imp.rfPermute, file = "RData/RFpermute_M_1.rds")
+# } else {
+#   var.imp.rfPermute <- readRDS(file = "RData/RFpermute_M_1.rds")
+#   
+# }
+# 
+# p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
 # The scale option doesn't seem to do anything... 
 ```
 

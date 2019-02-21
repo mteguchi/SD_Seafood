@@ -124,6 +124,11 @@ shrimp.data %>% select(SP_GROUP, SP_GROUP_NUM,
          ZIP_f, YEAR_f, RV) %>%
   na.omit()-> shrimp.data.RF
 
+# add wild vs. aquaculture
+# then look just one at a time.
+
+# production method = 1 (wild) 2 (farmed)
+
 M.1 <- as.formula("PRICE ~ SP_GROUP_f+
                        SIZE_GROUP_f +
                        SHRIMP_PROCESSING_f +
@@ -170,8 +175,36 @@ if (!file.exists("RData/RF_M_1_min_depth.rds")){
   min_depth_df <- readRDS(file = "RData/RF_M_1_min_depth.rds")
 }
 
+plot_min_depth_distribution(min_depth_df)
+
+# if there were missing values, can use the option mean_sample = "relevant_trees" in the above call.
+```
+
+Zip code is an important variable! 
+
+More importance measures:
+```{r}
+if (!file.exists("RData/RF_M_1_importance.rds")){
+  importance_df <- measure_importance(RF.M.1)
+  
+  saveRDS(importance_df, file = "RData/RF_M_1_importance.rds")
+} else {
+  importance_df <- readRDS("RData/RF_M_1_importance.rds")
+}
+
+plot_multi_way_importance(importance_df, size_measure = "no_of_nodes")
+```
+
+```{r}
+plot_multi_way_importance(importance_df, 
+                          x_measure = "mse_increase", 
+                          y_measure = "node_purity_increase", 
+                          size_measure = "p_value", 
+                          no_of_labels = 5)
+```
 
 
+```{r}
 if (!file.exists("RData/RF_M_1_varImp.rds")){
   # type = 1 provides mean decrease in accuracy (MSE) 
   # type = 2 provides mean decrease in node impurity
