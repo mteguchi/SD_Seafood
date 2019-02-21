@@ -182,25 +182,16 @@ Let's use another method to see how that comes out.
 if (!file.exists("RData/RFpermute_M_1.rds")){
   var.imp.rfPermute <- rfPermute(formula = M.1,
                                  data = shrimp.data.RF,
-                                 ntree = ntree,
-                                 num.cores = 1)
+                                 ntree = ntree)
+  #,num.cores = 1
   saveRDS(var.imp.rfPermute, file = "RData/RFpermute_M_1.rds")
 } else {
   var.imp.rfPermute <- readRDS(file = "RData/RFpermute_M_1.rds")
   
 }
 
-
+p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
+# The scale option doesn't seem to do anything... 
 ```
 
-
-
-Compare the data and predictions:
-
-```{r}
-shrimp.data.RF$PREDICTED <- pred.RF.M.1[,1]
-ggplot(data = shrimp.data.RF) +
-  geom_point(aes(x = PRICE, y = PREDICTED))
-
-```
-
+The first one (SIZE_GROUP) is the same as the other method (cforest) but the second one (MARKETTYPE) was not the same. But the top three are still the same: SIZE_GROUP, MARKETTYPE, and SHRIMP_PROCESSING. 
