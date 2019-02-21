@@ -13,6 +13,7 @@ rm(list=ls())
 library(tidyverse)
 library(party)
 library(rfPermute)
+library(randomForestExplainer)
 
 ntree <- 5000
 
@@ -113,15 +114,20 @@ shrimp.data %>% select(SP_GROUP, SP_GROUP_NUM,
          SIZE_GROUP_f = as.factor(SIZE_GROUP_NUM),
          MARKETTYPE_f = as.factor(MARKETTYPE),
          SHRIMP_PROCESSING_f = as.factor(SHRIMP_PROCESSING_NUM),
+         ZIP_f = as.factor(ZIP),
+         YEAR_f = as.factor(YEAR),
          RV = runif(nrow(shrimp.data), 
                            min = 0, 
                            max = 100)) %>%
+  select(PRICE, ECOLABEL_f, SP_GROUP_f, SIZE_GROUP_f,
+         MARKETTYPE_f, SHRIMP_PROCESSING_f,
+         ZIP_f, YEAR_f, RV) %>%
   na.omit()-> shrimp.data.RF
 
 M.1 <- as.formula("PRICE ~ SP_GROUP_f+
                        SIZE_GROUP_f +
                        SHRIMP_PROCESSING_f +
-                       YEAR + ZIP + MARKETTYPE_f +
+                       YEAR_f + ZIP_f + MARKETTYPE_f +
                        ECOLABEL_f + RV")
 
 #p <- length(attr(terms(M.1), "term.labels"))
@@ -129,44 +135,45 @@ M.1 <- as.formula("PRICE ~ SP_GROUP_f+
 #mtry <- floor(sqrt(p)/2)
 #mtry <- floor(sqrt(p))
   
-if (!file.exists("RData/RF_M_1_out.rds")){
-  RF.M.1 <- cforest(formula = M.1,
+if (!file.exists("RData/cRF_M_1_out.rds")){
+  cRF.M.1 <- cforest(formula = M.1,
                     data = shrimp.data.RF,
                     control = cforest_unbiased(ntree = ntree,
                                                trace = 500))
   
-  saveRDS(RF.M.1, file = "RData/RF_M_1_out.rds")
+  saveRDS(cRF.M.1, file = "RData/cRF_M_1_out.rds")
   
 } else {
-  RF.M.1 <- readRDS("RData/RF_M_1_out.rds")
+  cRF.M.1 <- readRDS("RData/cRF_M_1_out.rds")
 }
 
 ```
 
 Find the variable importance:
 ```{r}
-if (!file.exists("RData/RF_M_1_varImp.rds")){
-  var.imp <- sort(varimp(RF.M.1), decreasing = FALSE)
-  saveRDS(var.imp, file = "RData/RF_M_1_varImp.rds")
+if (!file.exists("RData/cRF_M_1_varImp.rds")){
+  var.imp.cRF <- sort(varimp(cRF.M.1), decreasing = FALSE)
+  saveRDS(var.imp.cRF, file = "RData/cRF_M_1_varImp.rds")
 } else {
-  var.imp <- readRDS("RData/RF_M_1_varImp.rds")
+  var.imp.cRF <- readRDS("RData/cRF_M_1_varImp.rds")
 }
 
-if (!file.exists("RData/RF_M_1_predict.rds")){
-  pred.RF.M.1 <- predict(RF.M.1, newdata = NULL)
-  saveRDS(pred.RF.M.1, file = "RData/RF_M_1_predict.rds")
+if (!file.exists("RData/cRF_M_1_predict.rds")){
+  pred.cRF.M.1 <- predict(cRF.M.1, newdata = NULL)
+  saveRDS(pred.cRF.M.1, file = "RData/cRF_M_1_predict.rds")
 } else {
-  pred.RF.M.1 <- readRDS("RData/RF_M_1_predict.rds")
+  pred.cRF.M.1 <- readRDS("RData/cRF_M_1_predict.rds")
 }
 ```
 
 Look at the variable importance:
 ```{r}
-var.imp.df <- data.frame(var.imp)
-var.imp.df$Variable <- rownames(var.imp.df)
+var.imp.cRF.df <- data.frame(var.imp.cRF)
+var.imp.cRF.df$Variable <- rownames(var.imp.cRF.df)
 
-ggplot(data = var.imp.df) + 
-  geom_point(aes(x = var.imp, y = reorder(Variable, var.imp)),
+ggplot(data = var.imp.cRF.df) + 
+  geom_point(aes(x = var.imp, 
+                 y = reorder(Variable, var.imp)),
              size = 3) + 
   theme_bw() + 
   labs(x = "Variable importance") + 
@@ -177,6 +184,54 @@ ggplot(data = var.imp.df) +
 The variable importance metric is the mean difference in MSEs between out-of-bag (OOB) predictions and those from one variable permuted. The mean is computed from all trees and the mean divided by the standard deviation of the differences. 
 
 This plot indicates that size groups affect the prediction of price the most. Zipcode affects more than ecolabels. Interesting!  
+
+Just to compare results, I also use the original random forest. The packages (randomForest) should have been loaded by rfPermute package. This should be in the rfPermute output but doesn't seem to work... need to look into it. 
+```{r}
+if (!file.exists("RData/RF_M_1_out.rds")){
+  RF.M.1 <- randomForest(formula = M.1,
+                         data = shrimp.data.RF,
+                         ntree = 1000,
+                         immportance = FALSE,
+                         proximity = FALSE,
+                         do.trace = 500)
+  
+  saveRDS(RF.M.1, file = "RData/RF_M_1_out.rds")
+  
+} else {
+  RF.M.1 <- readRDS("RData/RF_M_1_out.rds")
+}
+
+if (!file.exists("RData/RF_M_1_varImp.rds")){
+  # type = 1 provides mean decrease in accuracy (MSE) 
+  # type = 2 provides mean decrease in node impurity
+  var.imp.RF <- sort(importance(RF.M.1, type = 1), 
+                     decreasing = FALSE)
+  saveRDS(var.imp.cRF, file = "RData/cRF_M_1_varImp.rds")
+} else {
+  var.imp.cRF <- readRDS("RData/cRF_M_1_varImp.rds")
+}
+
+if (!file.exists("RData/cRF_M_1_predict.rds")){
+  pred.cRF.M.1 <- predict(cRF.M.1, newdata = NULL)
+  saveRDS(pred.cRF.M.1, file = "RData/cRF_M_1_predict.rds")
+} else {
+  pred.cRF.M.1 <- readRDS("RData/cRF_M_1_predict.rds")
+}
+
+var.imp.RF.df <- data.frame(var.imp.cRF)
+var.imp.cRF.df$Variable <- rownames(var.imp.cRF.df)
+
+ggplot(data = var.imp.cRF.df) + 
+  geom_point(aes(x = var.imp, 
+                 y = reorder(Variable, var.imp)),
+             size = 3) + 
+  theme_bw() + 
+  labs(x = "Variable importance") + 
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_text(size =12))
+
+```
+
 
 Let's use another method to see how that comes out.
 ```{r}
