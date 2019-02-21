@@ -106,28 +106,33 @@ shrimp.data %>% select(SP_GROUP, SP_GROUP_NUM,
                        SHRIMP_PROCESSING, SHRIMP_PROCESSING_NUM,
                        YEAR, ZIP, MARKETTYPE, PRICE,
                        ECOLABEL2) %>% 
-  mutate(ECOLABEL2_f = as.factor(ECOLABEL2),
+  mutate(ECOLABEL_f = as.factor(ECOLABEL2),
+         SP_GROUP_f = as.factor(SP_GROUP_NUM),
+         SIZE_GROUP_f = as.factor(SIZE_GROUP_NUM),
+         MARKETTYPE_f = as.factor(MARKETTYPE),
+         SHRIMP_PROCESSING_f = as.factor(SHRIMP_PROCESSING_NUM),
          RV = runif(nrow(shrimp.data), 
                            min = 0, 
-                           max = 100)) -> shrimp.data.RF
+                           max = 100)) %>%
+  na.omit()-> shrimp.data.RF
 
-M.1 <- as.formula("PRICE ~ SP_GROUP_NUM+
-                       SIZE_GROUP_NUM +
-                       SHRIMP_PROCESSING_NUM +
-                       YEAR + ZIP + MARKETTYPE +
-                       ECOLABEL2_f + RV")
+M.1 <- as.formula("PRICE ~ SP_GROUP_f+
+                       SIZE_GROUP_f +
+                       SHRIMP_PROCESSING_f +
+                       YEAR + ZIP + MARKETTYPE_f +
+                       ECOLABEL_f + RV")
 
-p <- length(attr(terms(M.1), "term.labels"))
+#p <- length(attr(terms(M.1), "term.labels"))
 # floor(sqrt(p)) and try half and 2x that
 #mtry <- floor(sqrt(p)/2)
-mtry <- floor(sqrt(p))
+#mtry <- floor(sqrt(p))
   
 if (!file.exists("RData/RF_M_1_out.rds")){
   RF.M.1 <- cforest(formula = M.1,
                     data = shrimp.data.RF,
                     control = cforest_unbiased(ntree = ntree,
-                                               mtry = mtry,
                                                trace = 500))
+  
   saveRDS(RF.M.1, file = "RData/RF_M_1_out.rds")
   
 } else {
@@ -167,6 +172,8 @@ ggplot(data = var.imp.df) +
         axis.title.x = element_text(size =12))
 ```
 
+The variable importance metric is the mean difference in MSEs between OOB predictions and those from one variable permuted. The mean is computed from all trees and the mean divided by the standard deviation of the differences. 
+
 This plot indicates that size groups affect the prediction of price the most. Zipcode affects more than ecolabels. Interesting!  
 
 Let's use another method to see how that comes out.
@@ -175,7 +182,8 @@ Let's use another method to see how that comes out.
 if (!file.exists("RData/RFpermute_M_1.rds")){
   var.imp.rfPermute <- rfPermute(formula = M.1,
                                  data = shrimp.data.RF,
-                                 ntree = ntree)
+                                 ntree = ntree,
+                                 num.cores = 1)
   saveRDS(var.imp.rfPermute, file = "RData/RFpermute_M_1.rds")
 } else {
   var.imp.rfPermute <- readRDS(file = "RData/RFpermute_M_1.rds")
