@@ -172,8 +172,8 @@ var.imp.cRF.df <- data.frame(var.imp.cRF)
 var.imp.cRF.df$Variable <- rownames(var.imp.cRF.df)
 
 ggplot(data = var.imp.cRF.df) + 
-  geom_point(aes(x = var.imp, 
-                 y = reorder(Variable, var.imp)),
+  geom_point(aes(x = var.imp.cRF, 
+                 y = reorder(Variable, var.imp.cRF)),
              size = 3) + 
   theme_bw() + 
   labs(x = "Variable importance") + 
