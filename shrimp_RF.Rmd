@@ -14,6 +14,7 @@ library(tidyverse)
 library(party)
 library(rfPermute)
 library(randomForestExplainer)
+source("shrimp_analysis_fcns.R")
 
 ntree <- 5000
 shrimp.data.raw <- readRDS(file = "RData/shrimp_data.rds")

@@ -12,6 +12,8 @@ library(tidyverse)
 library(party)
 library(rfPermute)
 
+source("shrimp_analysis_fcns.R")
+
 ntree <- 500
 
 # group Tiny and Extra Small together
