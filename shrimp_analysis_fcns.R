@@ -65,7 +65,8 @@ shrimp.data.fcn <- function(shrimp.data.raw){
     mutate(SHRIMP_PROCESSING_NUM = case_when(SHRIMP_PROCESSING2 == "BREADED" ~ 1,
                                              SHRIMP_PROCESSING2 == "COOKED" ~ 2,
                                              SHRIMP_PROCESSING2 == "HEADLESS_RAW" ~ 3,
-                                             SHRIMP_PROCESSING2 == "WHOLE_RAW" ~ 4,
+                                             SHRIMP_PROCESSING2 == "PEELED_RAW" ~ 4,
+                                             SHRIMP_PROCESSING2 == "WHOLE_RAW" ~ 5,
                                              TRUE ~ NA_real_)) %>%
     filter(PRICE < 95) -> shrimp.data
   
