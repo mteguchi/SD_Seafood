@@ -134,29 +134,21 @@ plot_multi_way_importance(importance_df,
 
 
 ```{r}
-if (!file.exists("RData/RF_M_1_varImp.rds")){
-  # type = 1 provides mean decrease in accuracy (MSE) 
-  # type = 2 provides mean decrease in node impurity
-  var.imp.RF <- sort(importance(RF.M.1, type = 1), 
-                     decreasing = FALSE)
-  saveRDS(var.imp.cRF, file = "RData/cRF_M_1_varImp.rds")
-} else {
-  var.imp.cRF <- readRDS("RData/cRF_M_1_varImp.rds")
-}
+var.imp.RF.df <- data.frame(importance(RF.M.1)) 
+var.imp.RF.df$Variable <- rownames(var.imp.RF.df)
+rownames(var.imp.RF.df) <- NULL
 
-if (!file.exists("RData/cRF_M_1_predict.rds")){
-  pred.cRF.M.1 <- predict(cRF.M.1, newdata = NULL)
-  saveRDS(pred.cRF.M.1, file = "RData/cRF_M_1_predict.rds")
-} else {
-  pred.cRF.M.1 <- readRDS("RData/cRF_M_1_predict.rds")
-}
+# rearrange by increase in MSE in descending order
+data.table::setorder(var.imp.RF.df, -X.IncMSE)
 
-var.imp.RF.df <- data.frame(var.imp.cRF)
-var.imp.cRF.df$Variable <- rownames(var.imp.cRF.df)
+pred.RF.M.1 <- predict(RF.M.1)
+  
+var.imp.RF.df <- data.frame(var.imp.RF)
+var.imp.RF.df$Variable <- rownames(var.imp.RF.df)
 
-ggplot(data = var.imp.cRF.df) + 
-  geom_point(aes(x = var.imp, 
-                 y = reorder(Variable, var.imp)),
+ggplot(data = var.imp.RF.df) + 
+  geom_point(aes(x = X.IncMSE, 
+                 y = reorder(Variable, X.IncMSE)),
              size = 3) + 
   theme_bw() + 
   labs(x = "Variable importance") + 
