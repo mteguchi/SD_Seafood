@@ -146,7 +146,7 @@ ggplot(data = mean.PRICE.by.ZIP) +
   geom_point(aes(x = reorder(ZIP_f, mean_by_ZIP),
                  y = mean_by_ZIP),
              size = 3) +
-  labs(x = "") +
+  labs(x = "", y = "Mean price ($)") +
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
                                    hjust = 1))
@@ -164,67 +164,32 @@ shrimp.data.RF$ZIP_ordered <- factor(shrimp.data.RF$ZIP_f,
 ggplot(data = shrimp.data.RF) + 
   geom_boxplot(aes(x = ZIP_ordered, 
                    y = PREDICT)) + 
-  labs(x = "") +
+  labs(x = "", y = "Predicted price ($)") +
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
                                    hjust = 1)) 
 
 ```
 
-
-
-Just to compare results, I also use the original random forest. The packages (randomForest) should have been loaded by rfPermute package. This should be in the rfPermute output but doesn't seem to work... need to look into it. 
 ```{r}
-if (!file.exists("RData/RF_M_1_out.rds")){
-  RF.M.1 <- randomForest(formula = M.1,
-                         data = shrimp.data.RF,
-                         ntree = ntree,
-                         localImp = TRUE,
-                         immportance = FALSE,
-                         proximity = FALSE,
-                         do.trace = 500)
-  
-  saveRDS(RF.M.1, file = "RData/RF_M_1_out.rds")
-  
-} else {
-  RF.M.1 <- readRDS("RData/RF_M_1_out.rds")
-}
-
-var.imp.RF <- data.frame(importance(RF.M.1)) 
-var.imp.RF %>% mutate(Variable = rownames(var.imp.RF)) -> var.imp.RF.df
-
-pred.RF.M.1 <- RF.M.1$predicted
-
-ggplot(data = var.imp.RF.df) + 
-  geom_point(aes(x = X.IncMSE, 
-                 y = reorder(Variable, X.IncMSE)),
-             size = 3) + 
-  theme_bw() + 
-  labs(x = "Variable importance") + 
-  theme(axis.title.y = element_blank(),
-        axis.title.x = element_text(size =12))
-
+ggplot(data = shrimp.data.RF) + 
+  geom_boxplot(aes(x = ZIP_ordered, 
+                   y = PRICE)) + 
+  labs(x = "", y = "Observed price ($)") +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1)) 
 ```
 
-It's interesting that Zip code became a lot important than before... 
 
-Let's use another method to see how that comes out.
 ```{r}
-
-if (!file.exists("RData/RFpermute_M_1.rds")){
-  var.imp.rfPermute <- rfPermute(formula = M.1,
-                                 data = shrimp.data.RF,
-                                 ntree = ntree)
-  #,num.cores = 1
-  saveRDS(var.imp.rfPermute, file = "RData/RFpermute_M_1.rds")
-} else {
-  var.imp.rfPermute <- readRDS(file = "RData/RFpermute_M_1.rds")
-  
-}
-
-p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
-# The scale option doesn't seem to do anything... 
+ggplot(data = shrimp.data.RF) + 
+  geom_boxplot(aes(x = PROD_METHOD_f, y = PREDICT))+
+  scale_x_discrete(breaks = c("1", "2"),
+                   labels = c("Wild", "Farmed")) + 
+  labs(x = "", y = "Predicted price ($)") +
+  theme(axis.text = element_text(size = 12),
+        axis.title.y = element_text(size = 12))
 ```
 
-The first one (SIZE_GROUP) is the same as the other method (cforest) but the second one (MARKETTYPE) was not the same. But the top three are still the same: SIZE_GROUP, MARKETTYPE, and SHRIMP_PROCESSING. Interestingly, Ecolabel is not very important. 
 
