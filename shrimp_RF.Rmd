@@ -8,6 +8,9 @@ This notebook describes the variable selection process for predicting the price 
 The conditional random forest approach is used to select variables that are most useful in predicting the price of shrimp. Then the relationships between each of the selected variables and price are examined. 
 
 In the next section, I converted categorical variables into integer variables.  This was unnecessary but easier to deal with than having named categories.  
+
+Look into inTree package. 2019-02-25.
+
 ```{r}
 rm(list=ls())
 library(tidyverse)
@@ -37,26 +40,7 @@ shrimp.data %>% select(SPECIES, SP_GROUP,
 We may include more variables in the next attempt but I thought this may be a good place to start.  Here I further change the variables into factor variables as the numbers don't mean much for these variables. I also added a variable of random numbers (RV) as a yardstick to which all variables are compared. If a variable is less useful than random numbers for predicing the price, they are not very useful. 
 
 ```{r}
-shrimp.data %>% select(SP_GROUP, SP_GROUP_NUM,
-                       SIZE_GROUP, SIZE_GROUP_NUM,
-                       SHRIMP_PROCESSING, SHRIMP_PROCESSING_NUM,
-                       YEAR, ZIP, MARKETTYPE, PRICE,
-                       ECOLABEL2, PROD_METHOD) %>% 
-  mutate(ECOLABEL_f = as.factor(ECOLABEL2),
-         SP_GROUP_f = as.factor(SP_GROUP_NUM),
-         SIZE_GROUP_f = as.factor(SIZE_GROUP_NUM),
-         MARKETTYPE_f = as.factor(MARKETTYPE),
-         SHRIMP_PROCESSING_f = as.factor(SHRIMP_PROCESSING_NUM),
-         ZIP_f = as.factor(ZIP),
-         #YEAR_f = as.factor(YEAR),
-         PROD_METHOD_f = as.factor(PROD_METHOD),
-         RV = runif(nrow(shrimp.data), 
-                           min = 0, 
-                           max = 100)) %>%
-  select(PRICE, ECOLABEL_f, SP_GROUP_f, SIZE_GROUP_f,
-         MARKETTYPE_f, SHRIMP_PROCESSING_f,
-         ZIP_f, YEAR, PROD_METHOD_f, RV) %>%
-  na.omit()-> shrimp.data.RF
+shrimp.data.RF <- RF.shrimp.data(shrimp.data)
 
 M.1 <- as.formula("PRICE ~ SP_GROUP_f+
                        SIZE_GROUP_f +
@@ -92,7 +76,7 @@ if (!file.exists("RData/RF_M_1_out.rds")){
 }
 RF.M.1
 ```
-About 67% of variability was explained by the forest, when PROD_METHOD was not included. 
+About 67% of variability was explained by the forest, when PROD_METHOD was not included. It is 71% when PROD_METHOD is included. 
 
 Now I start looking at which variables are influential in predicting the price using randomForestExplainer package. 
 ```{r}
@@ -121,7 +105,8 @@ if (!file.exists("RData/RF_M_1_importance.rds")){
   importance_df <- readRDS("RData/RF_M_1_importance.rds")
 }
 
-plot_multi_way_importance(importance_df, size_measure = "no_of_nodes")
+plot_multi_way_importance(importance_df, 
+                          size_measure = "no_of_nodes")
 ```
 
 ```{r}
@@ -134,30 +119,89 @@ plot_multi_way_importance(importance_df,
 
 
 ```{r}
-var.imp.RF.df <- data.frame(importance(RF.M.1)) 
-var.imp.RF.df$Variable <- rownames(var.imp.RF.df)
-rownames(var.imp.RF.df) <- NULL
+# rearrange by increase in MSE in descending order (this result is hugely different from when randomForest::importance() is used... why is that? )
 
-# rearrange by increase in MSE in descending order
-data.table::setorder(var.imp.RF.df, -X.IncMSE)
+importance_df %>% mutate(var_name = case_when(variable == "SIZE_GROUP_f" ~ "SIZE",
+                                                variable == "ZIP_f" ~ "ZIP",
+                                                variable == "PROD_METHOD_f" ~ "WILD/FARM",
+                                                variable == "MARKETTYPE_f" ~ "MARKET",
+                                                variable == "SHRIMP_PROCESSING_f" ~ "PROCESSING",
+                                                variable == "SP_GROUP_f" ~ "SPECIES",
+                                                variable == "ECOLABEL_f" ~ "ECOLABEL",
+                                                variable == "YEAR" ~ "YEAR",
+                                                variable == "RV" ~ "RANDOM",
+                                                TRUE ~ NA_character_)) -> var.imp.RF.df 
 
-pred.RF.M.1 <- predict(RF.M.1)
-  
-var.imp.RF.df <- data.frame(var.imp.RF)
-var.imp.RF.df$Variable <- rownames(var.imp.RF.df)
-
-ggplot(data = var.imp.RF.df) + 
-  geom_point(aes(x = X.IncMSE, 
-                 y = reorder(Variable, X.IncMSE)),
+p.1 <- ggplot(data = var.imp.RF.df) + 
+  geom_point(aes(x = mse_increase, 
+                 y = reorder(var_name, mse_increase)),
              size = 3) + 
   theme_bw() + 
   labs(x = "Variable importance") + 
   theme(axis.title.y = element_blank(),
         axis.title.x = element_text(size =12))
 
+ggsave(p.1, 
+       filename = "figures/varImp_RF.png", 
+       device = "png", dpi = 600)
+print(p.1)
+
+```
+
+Size and zip turned out to be pretty important.  The result is quite different when imporatance in randomForest is used...
+
+```{r}
+var.imp.df <- data.frame(importance(RF.M.1))
+var.imp.df$variable <- rownames(var.imp.df) 
+rownames(var.imp.df) <- NULL
+#data.table::setorder(var.imp.df, -X.IncMSE)
+var.imp.df %>% mutate(var_name = case_when(variable == "SIZE_GROUP_f" ~ "SIZE",
+                                           variable == "ZIP_f" ~ "ZIP",
+                                           variable == "PROD_METHOD_f" ~ "WILD/FARM",
+                                           variable == "MARKETTYPE_f" ~ "MARKET",
+                                           variable == "SHRIMP_PROCESSING_f" ~ "PROCESSING",
+                                           variable == "SP_GROUP_f" ~ "SPECIES",
+                                           variable == "ECOLABEL_f" ~ "ECOLABEL",
+                                           variable == "YEAR" ~ "YEAR",
+                                           variable == "RV" ~ "RANDOM",
+                                           TRUE ~ NA_character_)) -> var.imp.df
+
+p.1a <- ggplot(data = var.imp.df) + 
+  geom_point(aes(x = X.IncMSE, 
+                 y = reorder(var_name, X.IncMSE)),
+             size = 3) + 
+  theme_bw() + 
+  labs(x = "Variable importance") + 
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_text(size =12))
+
+ggsave(p.1, 
+       filename = "figures/varImp_RF.png", 
+       device = "png", dpi = 600)
+print(p.1a)
 ```
 
 
+
+```{r}
+
+pred.RF.M.1 <- predict(RF.M.1)
+shrimp.data.RF$PREDICT <- pred.RF.M.1
+p.2 <- ggplot(data = shrimp.data.RF) + 
+  geom_point(aes(x = PRICE, y = PREDICT)) + 
+  geom_abline(slope = 1, intercept = 0,
+              size = 1.2) + 
+  labs(x = "Observed price ($/lb)", y = "Predicted price ($/lb)")
+
+ggsave(p.2, 
+       filename = "figures/ObsVsPred_RF.png", 
+       device = "png", dpi = 600)
+print(p.2)
+```
+
+
+
+rfPermute takes waaaaay too long to compute - so ignore it for now. 2019-02-25
 Let's use another method to see how that comes out.
 ```{r}
 
@@ -169,10 +213,10 @@ if (!file.exists("RData/RFpermute_M_1.rds")){
   saveRDS(var.imp.rfPermute, file = "RData/RFpermute_M_1.rds")
 } else {
   var.imp.rfPermute <- readRDS(file = "RData/RFpermute_M_1.rds")
-  
-}
 
-p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
+}
+# 
+# p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
 # The scale option doesn't seem to do anything... 
 ```
 

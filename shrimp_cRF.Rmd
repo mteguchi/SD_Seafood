@@ -40,26 +40,7 @@ shrimp.data %>% select(SPECIES, SP_GROUP,
 We may include more variables in the next attempt but I thought this may be a good place to start.  Here I further change the variables into factor variables as the numbers don't mean much for these variables. I also added a variable of random numbers (RV) as a yardstick to which all variables are compared. If a variable is less useful than random numbers for predicing the price, they are not very useful. 
 
 ```{r}
-shrimp.data %>% select(SP_GROUP, SP_GROUP_NUM,
-                       SIZE_GROUP, SIZE_GROUP_NUM,
-                       SHRIMP_PROCESSING, SHRIMP_PROCESSING_NUM,
-                       YEAR, ZIP, MARKETTYPE, PRICE,
-                       ECOLABEL2, PROD_METHOD) %>% 
-  mutate(ECOLABEL_f = as.factor(ECOLABEL2),
-         SP_GROUP_f = as.factor(SP_GROUP_NUM),
-         SIZE_GROUP_f = as.factor(SIZE_GROUP_NUM),
-         MARKETTYPE_f = as.factor(MARKETTYPE),
-         SHRIMP_PROCESSING_f = as.factor(SHRIMP_PROCESSING_NUM),
-         ZIP_f = as.factor(ZIP),
-         #YEAR_f = as.factor(YEAR),
-         PROD_METHOD_f = as.factor(PROD_METHOD),
-         RV = runif(nrow(shrimp.data), 
-                           min = 0, 
-                           max = 100)) %>%
-  select(PRICE, ECOLABEL_f, SP_GROUP_f, SIZE_GROUP_f,
-         MARKETTYPE_f, SHRIMP_PROCESSING_f,
-         ZIP_f, YEAR, PROD_METHOD_f, RV) %>%
-  na.omit()-> shrimp.data.RF
+shrimp.data.RF <- RF.shrimp.data(shrimp.data)
 
 M.1 <- as.formula("PRICE ~ SP_GROUP_f+
                        SIZE_GROUP_f +
@@ -88,69 +69,105 @@ if (!file.exists("RData/cRF_M_1_out.rds")){
 
 Predict the price using the model and find the variable importance:
 ```{r}
-if (!file.exists("RData/cRF_M_1_predict.rds")){
-  pred.cRF.M.1 <- predict(cRF.M.1, newdata = NULL)
-  saveRDS(pred.cRF.M.1, file = "RData/cRF_M_1_predict.rds")
-} else {
-  pred.cRF.M.1 <- readRDS("RData/cRF_M_1_predict.rds")
-}
+predict.all <- predict.cRF(cRF.M.1,
+                           outfilename = "RData/cRF_M_1_predict.rds")
 
-shrimp.data.RF$PREDICT <- pred.cRF.M.1
+fit.all <- fit.cRF(predicted = predict.all,
+                   df = shrimp.data.RF)
 
-if (!file.exists("RData/cRF_M_1_varImp.rds")){
-  var.imp.cRF <- sort(varimp(cRF.M.1), decreasing = FALSE)
-  saveRDS(var.imp.cRF, file = "RData/cRF_M_1_varImp.rds")
-} else {
-  var.imp.cRF <- readRDS("RData/cRF_M_1_varImp.rds")
-}
+var.imp.cRF.df <- var.imp.shrimp(cRF.out = cRF.M.1,
+                              outfile = "RData/cRF_M_1_varImp.rds")
+
+print(fit.all$R2)
+
 
 ```
 
+The vairance explained is pseudo.R2 = 0.77 as of Feb 25, 2019, using "PRICE ~ SP_GROUP_f+SIZE_GROUP_f + SHRIMP_PROCESSING_f + YEAR + ZIP_f + MARKETTYPE_f + ECOLABEL_f + PROD_METHOD_f + RV". 
+
 Look at the variable importance:
 ```{r}
-var.imp.cRF.df <- data.frame(var.imp.cRF)
-var.imp.cRF.df$Variable <- rownames(var.imp.cRF.df)
+var.imp.cRF.df %>% mutate(var_name = case_when(Variable == "SIZE_GROUP_f" ~ "SIZE",
+                                                Variable == "ZIP_f" ~ "ZIP",
+                                                Variable == "PROD_METHOD_f" ~ "WILD/FARM",
+                                                Variable == "MARKETTYPE_f" ~ "MARKET",
+                                                Variable == "SHRIMP_PROCESSING_f" ~ "PROCESSING",
+                                                Variable == "SP_GROUP_f" ~ "SPECIES",
+                                                Variable == "ECOLABEL_f" ~ "ECOLABEL",
+                                                Variable == "YEAR" ~ "YEAR",
+                                                Variable == "RV" ~ "RANDOM",
+                                                TRUE ~ NA_character_)) -> var.imp.cRF.df
 
-ggplot(data = var.imp.cRF.df) + 
-  geom_point(aes(x = var.imp.cRF, 
-                 y = reorder(Variable, var.imp.cRF)),
+p.1 <- ggplot(data = var.imp.cRF.df) + 
+  geom_point(aes(x = var.imp, 
+                 y = reorder(var_name, var.imp)),
              size = 3) + 
   theme_bw() + 
   labs(x = "Variable importance") + 
   theme(axis.title.y = element_blank(),
         axis.title.x = element_text(size =12))
+
+ggsave(p.1, 
+       filename = "figures/varImp_cRF.png", 
+       device = "png", dpi = 600)
+print(p.1)
 ```
 
 The variable importance metric is the mean difference in MSEs between out-of-bag (OOB) predictions and those from one variable permuted. The mean is computed from all trees and the mean divided by the standard deviation of the differences. 
 
 This plot indicates that size groups affect the prediction of price the most. Zipcode affects more than ecolabels. Interesting!  
 
+Next, I look at the relationship between predicted and observed. If the prediction is perfect, the plot should be on the y = x line. 
+
+```{r}
+p.2 <- ggplot(data = fit.all$df) + 
+  geom_point(aes(x = PRICE, y = PREDICT)) + 
+  geom_abline(slope = 1, intercept = 0,
+              size = 1.2) + 
+  labs(x = "Observed price ($/lb)", y = "Predicted price ($/lb)")
+
+ggsave(p.2, 
+       filename = "figures/ObsVsPred_cRF.png", 
+       device = "png", dpi = 600)
+print(p.2)
+
+```
+
 
 
 ```{r}
-ggplot(data = shrimp.data.RF) + 
+p.3 <- ggplot(data = fit.all$df) + 
   geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
   scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
                    labels = c("Tiny", "Small", "Medium", "Large", 
                               "Extra Large", "Jumbo", "Extra Jumbo", 
-                              "Colossal", "Extra Collossal")) + 
-  labs(x = "") +
+                              "Colossal", "Extra Colossal")) + 
+  labs(x = "", y = "Predicted price ($/lb)") +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave(p.3, 
+       filename = "figures/sizeVsPred_cRF.png", 
+       device = "png", dpi = 600)
+print(p.3)
 ```
 
 ```{r}
-shrimp.data.RF %>% group_by(ZIP_f) %>%
+fit.all$df %>% group_by(ZIP_f) %>%
   summarise(mean_by_ZIP = mean(PREDICT))-> mean.PRICE.by.ZIP
 
-ggplot(data = mean.PRICE.by.ZIP) + 
+p.4 <- ggplot(data = mean.PRICE.by.ZIP) + 
   geom_point(aes(x = reorder(ZIP_f, mean_by_ZIP),
                  y = mean_by_ZIP),
              size = 3) +
-  labs(x = "", y = "Mean price ($)") +
+  labs(x = "", y = "Predicted mean price ($/lb)") +
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
                                    hjust = 1))
   
+ggsave(p.4, 
+       filename = "figures/zipVsPred_cRF.png", 
+       device = "png", dpi = 600)
+print(p.4)
 
 ```
 
@@ -158,13 +175,13 @@ ggplot(data = mean.PRICE.by.ZIP) +
 zip.order <- reorder(mean.PRICE.by.ZIP$ZIP_f, 
                      mean.PRICE.by.ZIP$mean_by_ZIP)
 
-shrimp.data.RF$ZIP_ordered <- factor(shrimp.data.RF$ZIP_f,
+fit.all$df$ZIP_ordered <- factor(fit.all$df$ZIP_f,
                                      ordered = TRUE,
                                      levels = levels(zip.order))
-ggplot(data = shrimp.data.RF) + 
+p.5 <- ggplot(data = fit.all$df) + 
   geom_boxplot(aes(x = ZIP_ordered, 
                    y = PREDICT)) + 
-  labs(x = "", y = "Predicted price ($)") +
+  labs(x = "", y = "Predicted price ($/lb)") +
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
                                    hjust = 1)) 
@@ -172,24 +189,283 @@ ggplot(data = shrimp.data.RF) +
 ```
 
 ```{r}
-ggplot(data = shrimp.data.RF) + 
+p.6 <- ggplot(data = fit.all$df) + 
   geom_boxplot(aes(x = ZIP_ordered, 
                    y = PRICE)) + 
-  labs(x = "", y = "Observed price ($)") +
+  labs(x = "", y = "Observed price ($/lb)") +
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
                                    hjust = 1)) 
+ggsave(p.6, 
+       filename = "figures/zipVsObs_cRF.png", 
+       device = "png", dpi = 600)
+print(p.6)
 ```
 
 
 ```{r}
-ggplot(data = shrimp.data.RF) + 
+p.7 <- ggplot(data = fit.all$df) + 
   geom_boxplot(aes(x = PROD_METHOD_f, y = PREDICT))+
   scale_x_discrete(breaks = c("1", "2"),
                    labels = c("Wild", "Farmed")) + 
-  labs(x = "", y = "Predicted price ($)") +
+  labs(x = "", y = "Predicted price ($/lb)") +
   theme(axis.text = element_text(size = 12),
         axis.title.y = element_text(size = 12))
+print(p.7)
+```
+
+```{r}
+shrimp.data.RF %>% filter(PROD_METHOD_f == "1") -> shrimp.data.wild.RF
+
+M.1.wild <- as.formula("PRICE ~ SP_GROUP_f+
+                       SIZE_GROUP_f +
+                       SHRIMP_PROCESSING_f +
+                       YEAR + ZIP_f + MARKETTYPE_f +
+                       ECOLABEL_f + RV")
+
+#p <- length(attr(terms(M.1), "term.labels"))
+# floor(sqrt(p)) and try half and 2x that
+#mtry <- floor(sqrt(p)/2)
+#mtry <- floor(sqrt(p))
+  
+if (!file.exists("RData/cRF_M_1_wild_out.rds")){
+  cRF.M.1.wild <- cforest(formula = M.1.wild,
+                    data = shrimp.data.wild.RF,
+                    control = cforest_unbiased(ntree = ntree,
+                                               trace = 500))
+  
+  saveRDS(cRF.M.1.wild, file = "RData/cRF_M_1_wild_out.rds")
+  
+} else {
+  cRF.M.1.wild <- readRDS("RData/cRF_M_1_wild_out.rds")
+}
+
+```
+
+Predict the price using the model and find the variable importance:
+```{r}
+predict.wild <- predict.cRF(cRF.M.1.wild,
+                            outfilename = "RData/cRF_M_1_wild_predict.rds")
+
+fit.wild <- fit.cRF(predicted = predict.wild,
+                    df = shrimp.data.wild.RF)
+
+var.imp.wild.cRF <- var.imp.shrimp(cRF.out = cRF.M.1.wild,
+                                   outfile = "RData/cRF_M_1_wild_varImp.rds")
+
+var.imp.wild.cRF %>% mutate(var_name = case_when(Variable == "SIZE_GROUP_f" ~ "SIZE",
+                                                Variable == "ZIP_f" ~ "ZIP",
+                                                Variable == "MARKETTYPE_f" ~ "MARKET",
+                                                Variable == "SHRIMP_PROCESSING_f" ~ "PROCESSING",
+                                                Variable == "SP_GROUP_f" ~ "SPECIES",
+                                                Variable == "ECOLABEL_f" ~ "ECOLABEL",
+                                                Variable == "YEAR" ~ "YEAR",
+                                                Variable == "RV" ~ "RANDOM",
+                                                TRUE ~ NA_character_)) -> var.imp.wild.cRF
+
+print(fit.wild$R2)
+
+p.8 <- ggplot(data = var.imp.wild.cRF) + 
+  geom_point(aes(x = var.imp, 
+                 y = reorder(var_name, var.imp)),
+             size = 3) + 
+  theme_bw() + 
+  labs(x = "Variable importance") + 
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_text(size =12))
+
+ggsave(p.8, 
+       filename = "figures/varImp_Wild_cRF.png", 
+       device = "png", dpi = 600)
+print(p.8)
+
+```
+
+```{r}
+p.9 <- ggplot(data = fit.wild$df) + 
+  geom_point(aes(x = PRICE, y = PREDICT)) + 
+  geom_abline(slope = 1, intercept = 0,
+              size = 1.2) + 
+  labs(x = "Observed price ($/lb)", y = "Predicted price ($/lb)")
+
+ggsave(p.9, 
+       filename = "figures/ObsVsPred_Wild_cRF.png", 
+       device = "png", dpi = 600)
+print(p.9)
+
 ```
 
 
+
+```{r}
+p.10 <- ggplot(data = fit.wild$df) + 
+  geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
+  scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
+                   labels = c("Tiny", "Small", "Medium", "Large", 
+                              "Extra Large", "Jumbo", "Extra Jumbo", 
+                              "Colossal", "Extra Colossal")) + 
+  labs(x = "", y = "Predicted price ($/lb)") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave(p.10, 
+       filename = "figures/sizeVsPred_wild_cRF.png", 
+       device = "png", dpi = 600)
+print(p.10)
+```
+
+```{r}
+shrimp.data.RF %>% filter(PROD_METHOD_f == "2") -> shrimp.data.farm.RF
+
+if (!file.exists("RData/cRF_M_1_farm_out.rds")){
+  cRF.M.1.farm <- cforest(formula = M.1.wild,
+                    data = shrimp.data.farm.RF,
+                    control = cforest_unbiased(ntree = ntree,
+                                               trace = 500))
+  
+  saveRDS(cRF.M.1.farm, file = "RData/cRF_M_1_farm_out.rds")
+  
+} else {
+  cRF.M.1.farm <- readRDS("RData/cRF_M_1_farm_out.rds")
+}
+
+```
+
+Predict the price using the model and find the variable importance:
+```{r}
+predict.farm <- predict.cRF(cRF.M.1.farm,
+                            outfilename = "RData/cRF_M_1_farm_predict.rds")
+
+fit.farm <- fit.cRF(predicted = predict.farm,
+                    df = shrimp.data.farm.RF)
+
+var.imp.farm.cRF <- var.imp.shrimp(cRF.out = cRF.M.1.farm,
+                                   outfile = "RData/cRF_M_1_farm_varImp.rds")
+
+var.imp.farm.cRF %>% mutate(var_name = case_when(Variable == "SIZE_GROUP_f" ~ "SIZE",
+                                                Variable == "ZIP_f" ~ "ZIP",
+                                                Variable == "MARKETTYPE_f" ~ "MARKET",
+                                                Variable == "SHRIMP_PROCESSING_f" ~ "PROCESSING",
+                                                Variable == "SP_GROUP_f" ~ "SPECIES",
+                                                Variable == "ECOLABEL_f" ~ "ECOLABEL",
+                                                Variable == "YEAR" ~ "YEAR",
+                                                Variable == "RV" ~ "RANDOM",
+                                                TRUE ~ NA_character_)) -> var.imp.farm.cRF
+
+print(fit.farm$R2)
+
+p.11 <- ggplot(data = var.imp.farm.cRF) + 
+  geom_point(aes(x = var.imp, 
+                 y = reorder(var_name, var.imp)),
+             size = 3) + 
+  theme_bw() + 
+  labs(x = "Variable importance") + 
+  theme(axis.title.y = element_blank(),
+        axis.title.x = element_text(size =12))
+
+ggsave(p.11, 
+       filename = "figures/varImp_farm_cRF.png", 
+       device = "png", dpi = 600)
+print(p.11)
+
+```
+
+```{r}
+p.12 <- ggplot(data = fit.farm$df) + 
+  geom_point(aes(x = PRICE, y = PREDICT)) + 
+  geom_abline(slope = 1, intercept = 0,
+              size = 1.2) + 
+  labs(x = "Observed price ($)", y = "Predicted price ($)")
+
+ggsave(p.12, 
+       filename = "figures/ObsVsPred_farm_cRF.png", 
+       device = "png", dpi = 600)
+print(p.12)
+
+```
+
+
+
+```{r}
+p.13 <- ggplot(data = fit.farm$df) + 
+  geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
+  scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
+                   labels = c("Tiny", "Small", "Medium", "Large", 
+                              "Extra Large", "Jumbo", "Extra Jumbo", 
+                              "Colossal", "Extra Collossal")) + 
+  labs(x = "", y = "Predicted price ($/lb)") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave(p.13, 
+       filename = "figures/sizeVsPred_farm_cRF.png", 
+       device = "png", dpi = 600)
+print(p.13)
+```
+
+```{r}
+p.15 <- ggplot(data = fit.farm$df) + 
+  geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
+  scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
+                   labels = c("Tiny", "Small", "Medium", "Large", 
+                              "Extra Large", "Jumbo", "Extra Jumbo", 
+                              "Colossal", "Extra Colossal")) + 
+  labs(x = "", y = "Predicted price ($/lb)") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggsave(p.15, 
+       filename = "figures/sizeVsPred_farm_cRF.png", 
+       device = "png", dpi = 600)
+print(p.15)
+```
+
+```{r}
+fit.farm$df %>% group_by(ZIP_f) %>%
+  summarise(mean_by_ZIP = mean(PREDICT))-> mean.PRICE.farm.by.ZIP
+
+p.16 <- ggplot(data = mean.PRICE.farm.by.ZIP) + 
+  geom_point(aes(x = reorder(ZIP_f, mean_by_ZIP),
+                 y = mean_by_ZIP),
+             size = 3) +
+  labs(x = "", y = "Predicted mean price ($/lb)") +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1))
+  
+ggsave(p.16, 
+       filename = "figures/zipVsPred_farm_cRF.png", 
+       device = "png", dpi = 600)
+print(p.16)
+
+```
+
+```{r}
+zip.order.farm <- reorder(mean.PRICE.farm.by.ZIP$ZIP_f, 
+                          mean.PRICE.farm.by.ZIP$mean_by_ZIP)
+
+fit.farm$df$ZIP_ordered <- factor(fit.farm$df$ZIP_f,
+                                  ordered = TRUE,
+                                  levels = levels(zip.order.farm))
+
+p.17 <- ggplot(data = fit.farm$df) + 
+  geom_boxplot(aes(x = ZIP_ordered, 
+                   y = PREDICT)) + 
+  labs(x = "", y = "Predicted price ($/lb)") +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1)) 
+
+print(p.17)
+```
+
+```{r}
+p.18 <- ggplot(data = fit.farm$df) + 
+  geom_boxplot(aes(x = ZIP_ordered, 
+                   y = PRICE)) + 
+  labs(x = "", y = "Observed price ($/lb)") +
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1)) 
+ggsave(p.18, 
+       filename = "figures/zipVsObs_farm_cRF.png", 
+       device = "png", dpi = 600)
+print(p.18)
+```

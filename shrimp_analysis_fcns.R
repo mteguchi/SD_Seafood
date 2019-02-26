@@ -73,3 +73,71 @@ shrimp.data.fcn <- function(shrimp.data.raw){
   return(shrimp.data)
 }
 
+# function to extract necessary data for RF analysis
+RF.shrimp.data <- function(shrimp.data){
+  shrimp.data %>% select(SP_GROUP, SP_GROUP_NUM,
+                         SIZE_GROUP, SIZE_GROUP_NUM,
+                         SHRIMP_PROCESSING, SHRIMP_PROCESSING_NUM,
+                         YEAR, ZIP, MARKETTYPE, PRICE,
+                         ECOLABEL2, PROD_METHOD) %>% 
+    mutate(ECOLABEL_f = as.factor(ECOLABEL2),
+           SP_GROUP_f = as.factor(SP_GROUP_NUM),
+           SIZE_GROUP_f = as.factor(SIZE_GROUP_NUM),
+           MARKETTYPE_f = as.factor(MARKETTYPE),
+           SHRIMP_PROCESSING_f = as.factor(SHRIMP_PROCESSING_NUM),
+           ZIP_f = as.factor(ZIP),
+           #YEAR_f = as.factor(YEAR),
+           PROD_METHOD_f = as.factor(PROD_METHOD),
+           RV = runif(nrow(shrimp.data), 
+                      min = 0, 
+                      max = 100)) %>%
+    select(PRICE, ECOLABEL_f, SP_GROUP_f, SIZE_GROUP_f,
+           MARKETTYPE_f, SHRIMP_PROCESSING_f,
+           ZIP_f, YEAR, PROD_METHOD_f, RV) %>%
+    na.omit()-> shrimp.data.RF
+  return(shrimp.data.RF)  
+}
+
+# function to run prediction on cRF. A vector is returned.
+predict.cRF <- function(cRF.out = NULL, outfilename = NULL){
+  if (!file.exists(outfilename)){
+    pred <- predict(cRF.out, type="response", OOB=TRUE)
+    saveRDS(pred, file = outfilename)
+  } else {
+    pred <- readRDS(outfilename)
+  }
+  
+  
+  return(as.vector(pred, mode = "numeric"))
+}
+
+# function to compute MSE and variance explained (pseudo R2). A list is returned.
+fit.cRF <- function(predicted = predict.farm,
+                    df = shrimp.data.farm.RF){
+  df$PREDICT <- predicted
+  
+  df %>% 
+    mutate(residual = PRICE - PREDICT) -> df
+  
+  mse <- sum(df$residual^2)/nrow(df)
+  pseudo.R2 <- 1-mse/var(df$PRICE)
+  return(list(MSE = mse,
+              R2 = pseudo.R2,
+              df = df))  
+}
+
+# function to extract variable importance metric
+var.imp.shrimp <- function(cRF.out = NULL,
+                           outfile = NULL){
+  if (!file.exists(outfile)){
+    var.imp <- sort(varimp(cRF.out), 
+                    decreasing = FALSE)
+    saveRDS(var.imp, file = outfile)
+  } else {
+    var.imp <- readRDS(outfile)
+  }
+  
+  var.imp <- data.frame(var.imp)
+  var.imp$Variable <- rownames(var.imp)
+  return(var.imp)
+}
