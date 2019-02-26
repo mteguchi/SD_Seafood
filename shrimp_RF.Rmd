@@ -148,13 +148,13 @@ print(p.1)
 
 ```
 
-Size and zip turned out to be pretty important.  The result is quite different when imporatance in randomForest is used...
+Size and zip turned out to be pretty important.  The result is quite different in scale when imporatance in randomForest is used...because using randomForest::importance will divide the mse_increase values by their SDs. 
 
 ```{r}
 var.imp.df <- data.frame(importance(RF.M.1))
 var.imp.df$variable <- rownames(var.imp.df) 
 rownames(var.imp.df) <- NULL
-#data.table::setorder(var.imp.df, -X.IncMSE)
+
 var.imp.df %>% mutate(var_name = case_when(variable == "SIZE_GROUP_f" ~ "SIZE",
                                            variable == "ZIP_f" ~ "ZIP",
                                            variable == "PROD_METHOD_f" ~ "WILD/FARM",
@@ -175,8 +175,8 @@ p.1a <- ggplot(data = var.imp.df) +
   theme(axis.title.y = element_blank(),
         axis.title.x = element_text(size =12))
 
-ggsave(p.1, 
-       filename = "figures/varImp_RF.png", 
+ggsave(p.1a, 
+       filename = "figures/varImp_RFa.png", 
        device = "png", dpi = 600)
 print(p.1a)
 ```
@@ -201,8 +201,7 @@ print(p.2)
 
 
 
-rfPermute takes waaaaay too long to compute - so ignore it for now. 2019-02-25
-Let's use another method to see how that comes out.
+rfPermute takes waaaaay too long to compute. Results are saved in a file. 
 ```{r}
 
 if (!file.exists("RData/RFpermute_M_1.rds")){
@@ -216,9 +215,37 @@ if (!file.exists("RData/RFpermute_M_1.rds")){
 
 }
 # 
-# p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
-# The scale option doesn't seem to do anything... 
+#p1 <- plot(rp.importance(var.imp.rfPermute, scale = F))
+# "scaling" will divide change in MSEs by SDs - same as using randomForest::varImp, when scale = T,
+# same as randomForestExplainer::measure_importance()
+p2 <- plot(rp.importance(var.imp.rfPermute, scale = T))
+ 
 ```
 
-The first one (SIZE_GROUP) is the same as the other method (cforest) but the second one (MARKETTYPE) was not the same. But the top three are still the same: SIZE_GROUP, MARKETTYPE, and SHRIMP_PROCESSING. Interestingly, Ecolabel is not very important. 
+Again, SIZE_GROUP and ZIP are the two major contributors.  
+
+Let's look at interactions using randomForestExplainer functions.
+
+```{r}
+int.vars <- important_variables(importance_df, 
+                                k = 4, 
+                                measures = c("mean_min_depth", "no_of_trees"))
+
+if (!file.exists("RData/RF_M_1_interactions.rds")){
+  interactions.df <- min_depth_interactions(RF.M.1, int.vars)
+  saveRDS(interactions.df, "RData/RF_M_1_interactions.rds")
+  
+} else {
+  interactions.df <- readRDS("RData/RF_M_1_interactions.rds")
+}
+
+plot_min_depth_interactions(interactions.df)
+
+```
+
+The following does the same things as above - so it takes a loooong time to complete. Don't. 
+```{r}
+
+#explain_forest(RF.M.1, interactions = TRUE, data = shrimp.data.RF)
+```
 
