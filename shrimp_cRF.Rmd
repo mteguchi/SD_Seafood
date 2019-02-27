@@ -83,7 +83,7 @@ print(fit.all$R2)
 
 ```
 
-The vairance explained is pseudo.R2 = 0.77 as of Feb 25, 2019, using "PRICE ~ SP_GROUP_f+SIZE_GROUP_f + SHRIMP_PROCESSING_f + YEAR + ZIP_f + MARKETTYPE_f + ECOLABEL_f + PROD_METHOD_f + RV". 
+The vairance explained is pseudo.R2 = 0.77 as of Feb 25, 2019, using "PRICE ~ SP_GROUP_f+SIZE_GROUP_f + SHRIMP_PROCESSING_f + YEAR + ZIP_f + MARKETTYPE_f + ECOLABEL_f + PROD_METHOD_f + RV". Now, it is 0.71... how the hell did I get 0.77 before? 
 
 Look at the variable importance:
 ```{r}
@@ -136,14 +136,24 @@ print(p.2)
 
 
 ```{r}
-p.3 <- ggplot(data = fit.all$df) + 
-  geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
+# find the sample size for each category:
+fit.all$df %>% group_by(SIZE_GROUP_f) %>%
+  summarize(n = n()) -> size.n
+
+p.3 <- ggplot() + 
+  geom_boxplot(data = fit.all$df,
+               aes(x = SIZE_GROUP_f, y = PREDICT)) +
   scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
                    labels = c("Tiny", "Small", "Medium", "Large", 
                               "Extra Large", "Jumbo", "Extra Jumbo", 
                               "Colossal", "Extra Colossal")) + 
+  geom_text(data = size.n,
+            aes(x = SIZE_GROUP_f, y = 1, label = n), 
+            size = 3) + 
   labs(x = "", y = "Predicted price ($/lb)") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, 
+                                   vjust = 0.5, 
+                                   hjust = 1, size = 12))
 
 ggsave(p.3, 
        filename = "figures/sizeVsPred_cRF.png", 
@@ -153,16 +163,20 @@ print(p.3)
 
 ```{r}
 fit.all$df %>% group_by(ZIP_f) %>%
-  summarise(mean_by_ZIP = mean(PREDICT))-> mean.PRICE.by.ZIP
+  summarise(mean_by_ZIP = mean(PREDICT), n = n())-> mean.PRICE.by.ZIP
 
 p.4 <- ggplot(data = mean.PRICE.by.ZIP) + 
   geom_point(aes(x = reorder(ZIP_f, mean_by_ZIP),
                  y = mean_by_ZIP),
              size = 3) +
+  geom_text(aes(x = ZIP_f, y = 3, label = n), 
+            size = 3, angle = 90, hjust = 1, vjust = 0.5) + 
   labs(x = "", y = "Predicted mean price ($/lb)") +
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
-                                   hjust = 1))
+                                   hjust = 0.5,
+                                   size = 10)) + 
+  ylim(c(2, 22))
   
 ggsave(p.4, 
        filename = "figures/zipVsPred_cRF.png", 
@@ -186,6 +200,7 @@ p.5 <- ggplot(data = fit.all$df) +
                                    vjust = 0.5, 
                                    hjust = 1)) 
 
+print(p.5)
 ```
 
 ```{r}
@@ -264,7 +279,9 @@ var.imp.wild.cRF %>% mutate(var_name = case_when(Variable == "SIZE_GROUP_f" ~ "S
                                                 TRUE ~ NA_character_)) -> var.imp.wild.cRF
 
 print(fit.wild$R2)
+```
 
+```{r}
 p.8 <- ggplot(data = var.imp.wild.cRF) + 
   geom_point(aes(x = var.imp, 
                  y = reorder(var_name, var.imp)),
@@ -298,14 +315,21 @@ print(p.9)
 
 
 ```{r}
+fit.wild$df %>% group_by(SIZE_GROUP_f) %>%
+  summarize(n = n()) -> wild.size.n
+
 p.10 <- ggplot(data = fit.wild$df) + 
   geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
   scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
                    labels = c("Tiny", "Small", "Medium", "Large", 
                               "Extra Large", "Jumbo", "Extra Jumbo", 
                               "Colossal", "Extra Colossal")) + 
+  geom_text(data = wild.size.n,
+            aes(x = SIZE_GROUP_f, y = 3, label = n), 
+            size = 3) + 
   labs(x = "", y = "Predicted price ($/lb)") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12))
 
 ggsave(p.10, 
        filename = "figures/sizeVsPred_wild_cRF.png", 
@@ -352,7 +376,9 @@ var.imp.farm.cRF %>% mutate(var_name = case_when(Variable == "SIZE_GROUP_f" ~ "S
                                                 TRUE ~ NA_character_)) -> var.imp.farm.cRF
 
 print(fit.farm$R2)
+```
 
+```{r}
 p.11 <- ggplot(data = var.imp.farm.cRF) + 
   geom_point(aes(x = var.imp, 
                  y = reorder(var_name, var.imp)),
@@ -386,14 +412,21 @@ print(p.12)
 
 
 ```{r}
+fit.farm$df %>% group_by(SIZE_GROUP_f) %>%
+  summarize(n = n()) -> farm.size.n
+
 p.13 <- ggplot(data = fit.farm$df) + 
   geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
   scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
                    labels = c("Tiny", "Small", "Medium", "Large", 
                               "Extra Large", "Jumbo", "Extra Jumbo", 
                               "Colossal", "Extra Collossal")) + 
+  geom_text(data = farm.size.n,
+            aes(x = SIZE_GROUP_f, y = 3, label = n), 
+            size = 3) + 
   labs(x = "", y = "Predicted price ($/lb)") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12))
 
 ggsave(p.13, 
        filename = "figures/sizeVsPred_farm_cRF.png", 
@@ -401,34 +434,23 @@ ggsave(p.13,
 print(p.13)
 ```
 
-```{r}
-p.15 <- ggplot(data = fit.farm$df) + 
-  geom_boxplot(aes(x = SIZE_GROUP_f, y = PREDICT)) +
-  scale_x_discrete(breaks = c("1", "2", "3", "4", "5", "6", "7", "8", "9"),
-                   labels = c("Tiny", "Small", "Medium", "Large", 
-                              "Extra Large", "Jumbo", "Extra Jumbo", 
-                              "Colossal", "Extra Colossal")) + 
-  labs(x = "", y = "Predicted price ($/lb)") +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
-
-ggsave(p.15, 
-       filename = "figures/sizeVsPred_farm_cRF.png", 
-       device = "png", dpi = 600)
-print(p.15)
-```
 
 ```{r}
 fit.farm$df %>% group_by(ZIP_f) %>%
-  summarise(mean_by_ZIP = mean(PREDICT))-> mean.PRICE.farm.by.ZIP
+  summarise(mean_by_ZIP = mean(PREDICT),
+            n = n())-> mean.PRICE.farm.by.ZIP
 
 p.16 <- ggplot(data = mean.PRICE.farm.by.ZIP) + 
   geom_point(aes(x = reorder(ZIP_f, mean_by_ZIP),
                  y = mean_by_ZIP),
              size = 3) +
+  geom_text(aes(x = ZIP_f, y = 3, label = n), 
+            size = 3, angle = 90, hjust = 1, vjust = 0.5) + 
   labs(x = "", y = "Predicted mean price ($/lb)") +
   theme(axis.text.x = element_text(angle = 90, 
                                    vjust = 0.5, 
-                                   hjust = 1))
+                                   hjust = 1)) + 
+  ylim(c(2, 21))
   
 ggsave(p.16, 
        filename = "figures/zipVsPred_farm_cRF.png", 

@@ -224,6 +224,17 @@ p2 <- plot(rp.importance(var.imp.rfPermute, scale = T))
 
 Again, SIZE_GROUP and ZIP are the two major contributors.  
 
+RElationships between importance measures
+```{r}
+plot_importance_ggpairs(importance_df)
+```
+
+
+```{r}
+plot_importance_rankings(importance_df)
+```
+
+
 Let's look at interactions using randomForestExplainer functions.
 
 ```{r}
@@ -240,6 +251,23 @@ if (!file.exists("RData/RF_M_1_interactions.rds")){
 }
 
 plot_min_depth_interactions(interactions.df)
+
+```
+
+```{r}
+int.vars.MSE <- important_variables(importance_df, 
+                                k = 4, 
+                                measures = c("mse_increase", "no_of_trees"))
+
+if (!file.exists("RData/RF_M_1_interactions_MSE.rds")){
+  interactions.MSE.df <- min_depth_interactions(RF.M.1, int.vars.MSE)
+  saveRDS(interactions.MSE.df, "RData/RF_M_1_interactions_MSE.rds")
+  
+} else {
+  interactions.MSE.df <- readRDS("RData/RF_M_1_interactions_MSE.rds")
+}
+
+plot_min_depth_interactions(interactions.MSE.df)
 
 ```
 

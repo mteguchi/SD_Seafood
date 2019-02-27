@@ -112,8 +112,8 @@ predict.cRF <- function(cRF.out = NULL, outfilename = NULL){
 }
 
 # function to compute MSE and variance explained (pseudo R2). A list is returned.
-fit.cRF <- function(predicted = predict.farm,
-                    df = shrimp.data.farm.RF){
+fit.cRF <- function(predicted = NULL,
+                    df = NULL){
   df$PREDICT <- predicted
   
   df %>% 
