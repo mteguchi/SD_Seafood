@@ -1,0 +1,278 @@
+---
+title: "Examination of the value of eco-labeled products"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+
+```
+
+Categorical comparisons – product (with eco-label attribute) vs price
+
+```{r get_data, echo=FALSE, include=FALSE}
+col.def <- cols("YEAR" = col_integer(),
+                "MONTH" = col_integer(),
+                "DAY" = col_integer(),
+                "DATE" = col_date(format = "%m/%d/%y"),
+                "ZIP" = col_integer(),
+                "LATITUDE" = col_double(),
+                "LONGITUDE" = col_double(),
+                "MKT_NAME" = col_character(),
+                "MARKETNAME" = col_integer(),
+                "MARKETTYPE" = col_integer(),
+                "FULL_LABEL" = col_character(),
+                "COMMON_NAME" = col_character(),
+                "LENGTH_CM" = col_double(),
+                "FOODGRP" = col_character(),
+                "SPP_GROUP" = col_character(),
+                "DSPPGRP" = col_integer(),
+                "SPECIES" = col_character(),
+                "FAMILY" = col_character(),
+                "TL" = col_double(),
+                "K_YR" = col_double(),
+                "PRICE" = col_double(),
+                "DCOUNTRY" = col_integer(),
+                "COUNTRY" = col_character(),
+                "DCONDITION" = col_integer(),
+                "CONDITION" = col_character(),
+                "PRODUCT_TYPE" = col_character(),
+                "BRAND_NAME" = col_character(),
+                "PROD_METHOD" = col_integer(),
+                "KEYWORD" = col_character(),
+                "ECOLABEL" = col_character(),
+                "SFW_RATING" = col_integer(),
+                "WILD" = col_integer(),
+                "FARMED" = col_integer(),
+                "FRESH" = col_integer(),
+                "HVINVERT" = col_integer(),
+                "SHRIMP" = col_integer(),
+                "LOCAL" = col_integer(),
+                "LIVE" = col_integer(),
+                "SUSHI" = col_integer(),
+                "RESPONSIBLE" = col_integer(),
+                "MSC" = col_integer(),
+                "SUSTAINABLE" = col_integer(),
+                "MBA" = col_integer(),
+                "MBA_CARD" = col_integer(),
+                "MBA_APP" = col_integer(),
+                "BAP" = col_integer(),
+                "DBAPSTARS" = col_integer(),
+                "BAP_LEVEL" = col_character(),
+                "REGION" = col_character(),
+                "GEAR" = col_character(),
+                "SIZE_CLASS" = col_character(),
+                "SHRIMP_PROCESSING" = col_character(),
+                "DPROCCOUNTRY" = col_integer(),
+                "PROCESSING_COUNTRY" = col_character(),
+                "HACCP" = col_integer(),
+                "SIZE_GROUP" = col_character(),
+                "DOLPHIN_SAFE" = col_character(),
+                "OTHER_TEXT" = col_character(),
+                "GF" = col_character(),
+                "O3" = col_character(),
+                "NONGMO" = col_integer(),
+                "SUSTAIN-" = col_integer(),
+                "TRAC-" = col_integer(),
+                "USA STATE" = col_character())
+
+main.data <- read_csv(file = "data/SDSEAFOOD_Master_02042019_2.csv",
+                      col_types = col.def)
+
+# Bring in the keys:
+key_country <- read.csv(file = "data/SDSEAFOOD_KEY_DCOUNTRY_02012019_1.csv")
+key_condition <- read.csv(file = "data/SDSEAFOOD_KEY_DCONDITION_02012019_1.csv")
+key_food.grp <- read.csv(file = "data/SDSEAFOOD_KEY_DFOODGRP_02012019_1.csv")
+key_market.name <- read.csv(file = "data/SDSEAFOOD_KEY_DMARKETNAME_02012019_1.csv")
+key_market.type <- read.csv(file = "data/SDSEAFOOD_KEY_DMARKETTYPE_02012019_1.csv")
+key_MBA <- read.csv(file = "data/SDSEAFOOD_KEY_DMBA_X_02012019_1.csv")
+key_spp.grp <- read.csv(file = "data/SDSEAFOOD_KEY_DSPPGRP_02012019_1.csv")
+
+```
+
+
+# 1.	What is the average price of eco-labeled seafood vs non-ecolabeled seafood of the same species?
+	Filter by: 
+
+## A.	Monterey Bay Aquarium (MBA) Green/Yellow (fresh products only; this is the Whole Foods “effect”)
+Should I take out products with other ecolabels? 
+
+### MBA
+```{r get_MBA, echo=FALSE, include=FALSE}
+# then filter away!
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
+         MBA) %>%
+  mutate(MBA_1_2 = ifelse(is.na(MBA), 2, 
+                          ifelse((MBA == 1 | MBA == 2), 1, 2))) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") %>%
+  group_by(as.factor(DSPPGRP)) -> MBA.data
+
+ggplot(MBA.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = log(PRICE), color = as.factor(MBA_1_2)))+
+  scale_color_discrete(labels = c("MBA 1&2", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  xlab("DSPPGRP")
+  
+
+```
+
+Interesting to note that variability for MBA 1 & 2 is less than that for others. We may compare that statistically but it's pretty o bvious... 
+	
+### MBA_CARD
+```{r}
+# then filter away!
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
+         MBA_CARD) %>%
+  mutate(MBA_1_2 = ifelse(is.na(MBA_CARD), 2, 
+                          ifelse((MBA_CARD == 1 | MBA_CARD == 2), 1, 2))) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") %>%
+  group_by(as.factor(DSPPGRP)) -> MBA_CARD.data
+
+ggplot(MBA_CARD.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = log(PRICE), color = as.factor(MBA_1_2)))+
+  scale_color_discrete(labels = c("MBA 1&2", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  xlab("DSPPGRP")
+```
+
+The difference in variability found in MBA is less obvious when using MBA_CARD. Price difference is not obvious. 
+
+### MBA_APP
+```{r}
+# then filter away!
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
+         MBA_APP) %>%
+  mutate(MBA_1_2 = ifelse(is.na(MBA_APP), 2, 
+                          ifelse((MBA_APP == 1 | MBA_APP == 2), 1, 2))) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") %>%
+  group_by(as.factor(DSPPGRP)) -> MBA_APP.data
+
+ggplot(MBA_APP.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = log(PRICE), color = as.factor(MBA_1_2)))+
+  scale_color_discrete(labels = c("MBA 1&2", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  xlab("DSPPGRP")
+```
+
+The difference in variability found in MBA is less obvious when using MBA_APP. Price difference is not obvious. 
+
+## B.	Marine Stewardship Council (MSC) certification
+```{r}
+# then filter away!
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
+         MSC) %>%
+  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") %>%
+  group_by(as.factor(DSPPGRP)) -> MSC.data
+
+ggplot(MSC.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = log(PRICE), color = as.factor(MSC_1)))+
+  scale_color_discrete(labels = c("MSC", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  xlab("DSPPGRP")
+```
+
+
+### Fresh; frozen; shelf stable products run separately 
+#### Fresh
+```{r}
+main.data %>% 
+  filter(FRESH == 1) %>% 
+  select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
+         MSC) %>%
+  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") %>%
+  group_by(as.factor(DSPPGRP)) -> MSC.fresh.data
+
+ggplot(MSC.fresh.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = log(PRICE), color = as.factor(MSC_1)))+
+  scale_color_discrete(labels = c("MSC", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  labs(x = "DSPPGRP", title = "Fresh")
+```
+
+#### Frozen
+
+```{r}
+main.data %>% 
+  filter(DCONDITION == 5 | DCONDITION == 6) %>% 
+  select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
+         MSC) %>%
+  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") %>%
+  group_by(as.factor(DSPPGRP)) -> MSC.frozen.data
+
+ggplot(MSC.frozen.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = log(PRICE), color = as.factor(MSC_1)))+
+  scale_color_discrete(labels = c("MSC", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  labs(x = "DSPPGRP", title = "Frozen") 
+```
+
+#### Shelf-stable
+```{r}
+main.data %>% 
+  filter(DCONDITION == 7 | DCONDITION == 7) %>% 
+  select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
+         MSC) %>%
+  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") %>%
+  group_by(as.factor(DSPPGRP)) -> MSC.SS.data
+
+ggplot(MSC.SS.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = log(PRICE), color = as.factor(MSC_1)))+
+  scale_color_discrete(labels = c("MSC", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  labs(x = "DSPPGRP", title = "Shelf-stable") 
+```
+
+
+
+C.	Best Aquaculture Practices (BAP)
+a.	Fresh; frozen products run separately
+	Identify the species that have these labels – if this isn’t straightforward, we will help
+	Please compare average price/lb of the same species with and without these labels, within product type category (fresh w eco-label vs. fresh non-ecolabel, frozen w ecolabel vs. frozen without ecolabel, shelf stable w ecolabel vs. shelf stable without ecolabel)
+2.	What is the price of eco-labeled shrimp vs non-ecolabeled shrimp? 
+Filter by: 
+A.	MSC - tiny shrimp, P. jordani (these are size tiny, fresh, wild-caught US and Canada) 
+B.	MBA - white shrimp. L. setiferus  (only one size; fresh, wild caught US & Canada)
+C.	Fair Trade – white and blue shrimp; not giant size; fresh, wild; Del Pacifico product
+D.	BAP whiteleg shrimp (farmed)
+E.	BAP giant tiger prawn (farmed)
+Please compare price/lb of the same species, size and fresh/farmed with & w/o these labels
+3.	Litopenaeus (white or whiteleg shrimp) - price for wild-ecolabel; wild-no ecolabel; farmed- ecolabel; farmed-no ecolabel. 
+
+4.	Shrimp by processing
+All penaeid shrimp - Filter by processing “head on”, “headless”, “tail on”, “tail off”, and “cooked”
+	Please compare price/lb 
