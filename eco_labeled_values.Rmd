@@ -8,7 +8,7 @@ rm(list=ls())
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(ggplot2)
-
+library(BEST)   # for Bayesian t tests
 ```
 
 Categorical comparisons – product (with eco-label attribute) vs price
@@ -104,165 +104,442 @@ Should I take out products with other ecolabels?
 ```{r get_MBA, echo=FALSE, include=FALSE}
 # then filter away!
 main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
-         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
-         MBA) %>%
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION,
+         MBA, MSC, BAP) %>%
+  filter(DCONDITION == 2)  %>%  # Fresh only
+  filter(is.na(MSC))  %>% # remove MSC certified
+  filter(is.na(BAP))  %>% # remove BAP certified
   mutate(MBA_1_2 = ifelse(is.na(MBA), 2, 
                           ifelse((MBA == 1 | MBA == 2), 1, 2))) %>%
-  left_join(key_spp.grp, by = "DSPPGRP") %>%
-  group_by(as.factor(DSPPGRP)) -> MBA.data
+  left_join(key_spp.grp, by = "DSPPGRP") -> MBA.data
+
+# find which levels are available as pairs:
+MBA.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MBA_1_2 == 1) %>%
+  summarize(n = n()) -> MBA_1.summary
+
+MBA.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MBA_1_2 == 2) %>%
+  summarize(n = n()) -> MBA_2.summary
+
+common.levels <- intersect(unique(MBA_1.summary$`as.factor(DSPPGRP)`),
+                           unique(MBA_2.summary$`as.factor(DSPPGRP)`))
+
+MBA.data <- MBA.data[MBA.data$DSPPGRP %in% common.levels,]
+
+# MBA.data %>% group_by(as.factor(MBA_1_2), DSPPGRP) %>%
+#   summarize(n = n()) -> MBA.summary
+
+
+```
+
+Interesting to note that variability for MBA 1 & 2 is less than that for others. We may compare that statistically but it's pretty obvious...
+
+Doing Bayesian "t-tests" for these groups independently:
+```{r MBA_tests, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/MBA_test_results.rds")){
+  BESTout <- vector(mode = "list", length = length(common.levels))
+  k <- 1
+  for (k in 1:length(common.levels)){
+    MBA.data %>% filter(DSPPGRP == as.numeric(common.levels[k])) %>%
+      select(MBA_1_2, PRICE) -> tmp
+    
+    tmp %>% filter(MBA_1_2 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    tmp %>% filter(MBA_1_2 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout[[k]] <- BESTmcmc(y1, y2,
+                               numSavedSteps = 10000,
+                               burnInSteps = 5000,
+                               thinSteps = 5,
+                               parallel = TRUE)
+      
+    }
+  }
+  
+  saveRDS(BESTout, "RData/MBA_test_results.rds")
+  
+} else {
+  BESTout <- readRDS("RData/MBA_test_results.rds")
+}
+
+p.dif.gt.0 <- unlist(lapply(BESTout, 
+                            FUN = function(x) {return(ifelse(!is.null(x), 
+                                                             summary(x)["muDiff", "%>compVal"], 
+                                                             NA))})) * 0.01
+
+p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+                            p = p.dif.gt.0)
+```
+
+ 
+
+```{r plot_MBA, echo=FALSE, fig.cap="Values on top indicate the probability that the means are different for each group."}
 
 ggplot(MBA.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = log(PRICE), color = as.factor(MBA_1_2)))+
+                   y = (PRICE), 
+                   color = as.factor(MBA_1_2)))+
   scale_color_discrete(labels = c("MBA 1&2", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  xlab("DSPPGRP")
-  
+  labs(x = "DSPPGRP", title = "MBA 1&2, Fresh products only") +
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = as.factor(DSPPGRP), 
+                y = max(MBA.data$PRICE), 
+                label = signif(p, 2)))
 
 ```
-
-Interesting to note that variability for MBA 1 & 2 is less than that for others. We may compare that statistically but it's pretty o bvious... 
-	
-### MBA_CARD
-```{r}
-# then filter away!
-main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
-         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
-         MBA_CARD) %>%
-  mutate(MBA_1_2 = ifelse(is.na(MBA_CARD), 2, 
-                          ifelse((MBA_CARD == 1 | MBA_CARD == 2), 1, 2))) %>%
-  left_join(key_spp.grp, by = "DSPPGRP") %>%
-  group_by(as.factor(DSPPGRP)) -> MBA_CARD.data
-
-ggplot(MBA_CARD.data) +
-  geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = log(PRICE), color = as.factor(MBA_1_2)))+
-  scale_color_discrete(labels = c("MBA 1&2", "Others")) + 
-  guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
-                                   hjust = 1, size = 12)) +
-  xlab("DSPPGRP")
-```
-
-The difference in variability found in MBA is less obvious when using MBA_CARD. Price difference is not obvious. 
-
-### MBA_APP
-```{r}
-# then filter away!
-main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
-         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
-         MBA_APP) %>%
-  mutate(MBA_1_2 = ifelse(is.na(MBA_APP), 2, 
-                          ifelse((MBA_APP == 1 | MBA_APP == 2), 1, 2))) %>%
-  left_join(key_spp.grp, by = "DSPPGRP") %>%
-  group_by(as.factor(DSPPGRP)) -> MBA_APP.data
-
-ggplot(MBA_APP.data) +
-  geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = log(PRICE), color = as.factor(MBA_1_2)))+
-  scale_color_discrete(labels = c("MBA 1&2", "Others")) + 
-  guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
-                                   hjust = 1, size = 12)) +
-  xlab("DSPPGRP")
-```
-
-The difference in variability found in MBA is less obvious when using MBA_APP. Price difference is not obvious. 
 
 ## B.	Marine Stewardship Council (MSC) certification
-```{r}
-# then filter away!
-main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
-         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
-         MSC) %>%
-  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
-  left_join(key_spp.grp, by = "DSPPGRP") %>%
-  group_by(as.factor(DSPPGRP)) -> MSC.data
+```{r MSC_data, echo=FALSE, include=FALSE}
 
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION,
+         MBA, MSC, BAP) %>%
+  filter(is.na(MBA)) %>%
+  filter(is.na(BAP)) %>%
+  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") -> MSC.data
+
+# find which levels are available as pairs:
+MSC.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MSC_1 == 1) %>%
+  summarize(n = n()) -> MSC_1.summary
+
+MSC.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MSC_1 == 2) %>%
+  summarize(n = n()) -> MSC_2.summary
+
+common.levels <- intersect(unique(MSC_1.summary$`as.factor(DSPPGRP)`),
+                           unique(MSC_2.summary$`as.factor(DSPPGRP)`))
+
+MSC.data <- MSC.data[MSC.data$DSPPGRP %in% common.levels,]
+
+```
+
+
+Doing Bayesian "t-tests" for these groups independently:
+```{r MSC_tests, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/MSC_test_results.rds")){
+
+  BESTout.MSC <- vector(mode = "list", length = length(common.levels))
+  
+  k <- 1
+  for (k in 1:length(common.levels)){
+    MSC.data %>% filter(DSPPGRP == as.numeric(common.levels[k])) %>%
+      select(MSC_1, PRICE) -> tmp
+    
+    tmp %>% filter(MSC_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    tmp %>% filter(MSC_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.MSC[[k]] <- BESTmcmc(y1, y2,
+                                   numSavedSteps = 10000,
+                                   burnInSteps = 5000,
+                                   thinSteps = 5,
+                                   parallel = TRUE)
+      
+    }
+  }
+  saveRDS(BESTout.MSC, "RData/MSC_test_results.rds")
+} else {
+  BESTout.MSC <- readRDS("RData/MSC_test_results.rds")
+  
+}  
+
+p.dif.gt.0 <- unlist(lapply(BESTout.MSC, 
+                            FUN = function(x) {return(ifelse(!is.null(x), 
+                                                             summary(x)["muDiff", "%>compVal"], 
+                                                             NA))})) * 0.01
+
+p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+                            p = p.dif.gt.0)
+```
+
+```{r}
 ggplot(MSC.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = log(PRICE), color = as.factor(MSC_1)))+
+                   y = (PRICE), color = as.factor(MSC_1)))+
   scale_color_discrete(labels = c("MSC", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  xlab("DSPPGRP")
+  labs(x = "DSPPGRP", main = "MSC")+ 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = as.factor(DSPPGRP), 
+                y = max(MSC.data$PRICE), 
+                label = signif(p, 2)))
 ```
 
 
 ### Fresh; frozen; shelf stable products run separately 
 #### Fresh
 ```{r}
-main.data %>% 
-  filter(FRESH == 1) %>% 
-  select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
-         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
-         MSC) %>%
-  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
-  left_join(key_spp.grp, by = "DSPPGRP") %>%
-  group_by(as.factor(DSPPGRP)) -> MSC.fresh.data
+MSC.data %>% 
+  filter(DCONDITION == 2) %>% 
+  filter(is.na(MBA)) %>%
+  filter(is.na(BAP)) -> MSC.fresh.data
 
+
+# find which levels are available as pairs:
+MSC.fresh.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MSC_1 == 1) %>%
+  summarize(n = n()) -> MSC.fresh_1.summary
+
+MSC.fresh.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MSC_1 == 2) %>%
+  summarize(n = n()) -> MSC.fresh_2.summary
+
+common.levels <- intersect(unique(MSC.fresh_1.summary$`as.factor(DSPPGRP)`),
+                           unique(MSC.fresh_2.summary$`as.factor(DSPPGRP)`))
+
+MSC.fresh.data <- MSC.fresh.data[MSC.fresh.data$DSPPGRP %in% common.levels,]
+
+
+```
+
+
+Doing Bayesian "t-tests" for these groups independently:
+```{r MSC_tests_fresh, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/MSC_fresh_test_results.rds")){
+
+  BESTout.MSC.fresh <- vector(mode = "list", length = length(common.levels))
+  k <- 1
+  for (k in 1:length(common.levels)){
+    MSC.fresh.data %>% filter(DSPPGRP == as.numeric(common.levels[k])) %>%
+      select(MSC_1, PRICE) -> tmp
+    
+    tmp %>% filter(MSC_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    tmp %>% filter(MSC_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.MSC.fresh[[k]] <- BESTmcmc(y1, y2,
+                                         numSavedSteps = 10000,
+                                         burnInSteps = 5000,
+                                         thinSteps = 5,
+                                         parallel = TRUE)
+      
+    }
+  }
+  
+  saveRDS(BESTout.MSC.fresh, "RData/MSC_fresh_test_results.rds")
+} else {
+  BESTout.MSC.fresh <- readRDS("RData/MSC_fresh_test_results.rds")
+}
+
+p.dif.gt.0 <- unlist(lapply(BESTout.MSC.fresh, 
+                            FUN = function(x) {return(ifelse(!is.null(x), 
+                                                             summary(x)["muDiff", "%>compVal"], 
+                                                             NA))})) * 0.01
+
+p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+                            p = p.dif.gt.0)
+```
+
+```{r}
 ggplot(MSC.fresh.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = log(PRICE), color = as.factor(MSC_1)))+
+                   y = (PRICE), color = as.factor(MSC_1)))+
   scale_color_discrete(labels = c("MSC", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Fresh")
+  labs(x = "DSPPGRP", title = "Fresh") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = as.factor(DSPPGRP), 
+                y = max(MSC.fresh.data$PRICE), 
+                label = signif(p, 2)))
+
 ```
+
 
 #### Frozen
 
-```{r}
-main.data %>% 
+```{r MSC_frozen, echo=FALSE}
+MSC.data %>% 
   filter(DCONDITION == 5 | DCONDITION == 6) %>% 
-  select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
-         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
-         MSC) %>%
-  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
-  left_join(key_spp.grp, by = "DSPPGRP") %>%
-  group_by(as.factor(DSPPGRP)) -> MSC.frozen.data
+  filter(is.na(MBA)) %>%
+  filter(is.na(BAP)) -> MSC.frozen.data
 
+# find which levels are available as pairs:
+MSC.frozen.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MSC_1 == 1) %>%
+  summarize(n = n()) -> MSC.frozen_1.summary
+
+MSC.frozen.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MSC_1 == 2) %>%
+  summarize(n = n()) -> MSC.frozen_2.summary
+
+common.levels <- intersect(unique(MSC.frozen_1.summary$`as.factor(DSPPGRP)`),
+                           unique(MSC.frozen_2.summary$`as.factor(DSPPGRP)`))
+
+MSC.frozen.data <- MSC.frozen.data[MSC.frozen.data$DSPPGRP %in% common.levels,]
+
+
+```
+
+```{r MSC_tests_frozen, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/MSC_frozen_test_results.rds")){
+
+  BESTout.MSC.frozen <- vector(mode = "list", length = length(common.levels))
+  k <- 1
+  for (k in 1:length(common.levels)){
+    MSC.frozen.data %>% filter(DSPPGRP == as.numeric(common.levels[k])) %>%
+      select(MSC_1, PRICE) -> tmp
+    
+    tmp %>% filter(MSC_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    tmp %>% filter(MSC_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.MSC.frozen[[k]] <- BESTmcmc(y1, y2,
+                                   numSavedSteps = 10000,
+                                   burnInSteps = 5000,
+                                   thinSteps = 5,
+                                   parallel = TRUE)
+      
+    }
+  }
+  
+  saveRDS(BESTout.MSC.frozen, "RData/MSC_frozen_test_results.rds")
+} else {
+  BESTout.MSC.frozen <- readRDS("RData/MSC_frozen_test_results.rds")
+}
+
+p.dif.gt.0 <- unlist(lapply(BESTout.MSC.frozen, 
+                            FUN = function(x) {return(ifelse(!is.null(x), 
+                                                             summary(x)["muDiff", "%>compVal"], 
+                                                             NA))})) * 0.01
+
+p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+                            p = p.dif.gt.0)
+```
+
+```{r}
 ggplot(MSC.frozen.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = log(PRICE), color = as.factor(MSC_1)))+
+                   y = (PRICE), color = as.factor(MSC_1)))+
   scale_color_discrete(labels = c("MSC", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Frozen") 
+  labs(x = "DSPPGRP", title = "Frozen") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = as.factor(DSPPGRP), 
+                y = max(MSC.frozen.data$PRICE), 
+                label = signif(p, 2)))
 ```
+
+
 
 #### Shelf-stable
 ```{r}
-main.data %>% 
-  filter(DCONDITION == 7 | DCONDITION == 7) %>% 
-  select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
-         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, CONDITION,
-         MSC) %>%
-  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) %>%
-  left_join(key_spp.grp, by = "DSPPGRP") %>%
-  group_by(as.factor(DSPPGRP)) -> MSC.SS.data
+MSC.data %>% 
+  filter(DCONDITION == 7 | DCONDITION == 8) %>% 
+  filter(is.na(MBA)) %>%
+  filter(is.na(BAP)) -> MSC.SS.data
+
+# find which levels are available as pairs:
+MSC.SS.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MSC_1 == 1) %>%
+  summarize(n = n()) -> MSC.SS_1.summary
+
+MSC.SS.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(MSC_1 == 2) %>%
+  summarize(n = n()) -> MSC.SS_2.summary
+
+common.levels <- intersect(unique(MSC.SS_1.summary$`as.factor(DSPPGRP)`),
+                           unique(MSC.SS_2.summary$`as.factor(DSPPGRP)`))
+
+MSC.SS.data <- MSC.SS.data[MSC.SS.data$DSPPGRP %in% common.levels,]
+
+```
+
+
+```{r MSC_tests_SS, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/MSC_SS_test_results.rds")){
+
+  BESTout.MSC.SS <- vector(mode = "list", length = length(common.levels))
+  k <- 1
+  for (k in 1:length(common.levels)){
+    MSC.SS.data %>% filter(DSPPGRP == as.numeric(common.levels[k])) %>%
+      select(MSC_1, PRICE) -> tmp
+    
+    tmp %>% filter(MSC_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    tmp %>% filter(MSC_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.MSC.SS[[k]] <- BESTmcmc(y1, y2,
+                                   numSavedSteps = 10000,
+                                   burnInSteps = 5000,
+                                   thinSteps = 5,
+                                   parallel = TRUE)
+      
+    
+    }
+  }
+  
+  saveRDS(BESTout.MSC.SS, "RData/MSC_SS_test_results.rds")
+} else {
+  BESTout.MSC.SS <- readRDS("RData/MSC_SS_test_results.rds")
+}
+
+p.dif.gt.0 <- unlist(lapply(BESTout.MSC.SS, 
+                            FUN = function(x) {return(ifelse(!is.null(x), 
+                                                             summary(x)["muDiff", "%>compVal"], 
+                                                             NA))})) * 0.01
+
+p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+                            p = p.dif.gt.0)
+```
+
+
+```{r MSC_SS_plot, echo=FALSE}
 
 ggplot(MSC.SS.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = log(PRICE), color = as.factor(MSC_1)))+
+                   y = (PRICE), color = as.factor(MSC_1)))+
   scale_color_discrete(labels = c("MSC", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Shelf-stable") 
-```
+  labs(x = "DSPPGRP", title = "Shelf-stable") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = as.factor(DSPPGRP), 
+                y = max(MSC.SS.data$PRICE), 
+                label = signif(p, 2)))
 
+```
 
 
 C.	Best Aquaculture Practices (BAP)
 a.	Fresh; frozen products run separately
 	Identify the species that have these labels – if this isn’t straightforward, we will help
 	Please compare average price/lb of the same species with and without these labels, within product type category (fresh w eco-label vs. fresh non-ecolabel, frozen w ecolabel vs. frozen without ecolabel, shelf stable w ecolabel vs. shelf stable without ecolabel)
+	
+	
+	
 2.	What is the price of eco-labeled shrimp vs non-ecolabeled shrimp? 
 Filter by: 
 A.	MSC - tiny shrimp, P. jordani (these are size tiny, fresh, wild-caught US and Canada) 
