@@ -432,7 +432,7 @@ p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
                             p = p.dif.gt.0)
 ```
 
-```{r}
+```{r MSC_frozen_plot, echo=FALSE}
 ggplot(MSC.frozen.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
                    y = (PRICE), color = as.factor(MSC_1)))+
@@ -450,7 +450,7 @@ ggplot(MSC.frozen.data) +
 
 
 #### Shelf-stable
-```{r}
+```{r MSC_ss, echo=FALSE}
 MSC.data %>% 
   filter(DCONDITION == 7 | DCONDITION == 8) %>% 
   filter(is.na(MBA)) %>%
@@ -533,23 +533,745 @@ ggplot(MSC.SS.data) +
 ```
 
 
-C.	Best Aquaculture Practices (BAP)
-a.	Fresh; frozen products run separately
+## C.	Best Aquaculture Practices (BAP)
 	Identify the species that have these labels – if this isn’t straightforward, we will help
 	Please compare average price/lb of the same species with and without these labels, within product type category (fresh w eco-label vs. fresh non-ecolabel, frozen w ecolabel vs. frozen without ecolabel, shelf stable w ecolabel vs. shelf stable without ecolabel)
-	
-	
-	
-2.	What is the price of eco-labeled shrimp vs non-ecolabeled shrimp? 
-Filter by: 
-A.	MSC - tiny shrimp, P. jordani (these are size tiny, fresh, wild-caught US and Canada) 
-B.	MBA - white shrimp. L. setiferus  (only one size; fresh, wild caught US & Canada)
-C.	Fair Trade – white and blue shrimp; not giant size; fresh, wild; Del Pacifico product
-D.	BAP whiteleg shrimp (farmed)
-E.	BAP giant tiger prawn (farmed)
-Please compare price/lb of the same species, size and fresh/farmed with & w/o these labels
-3.	Litopenaeus (white or whiteleg shrimp) - price for wild-ecolabel; wild-no ecolabel; farmed- ecolabel; farmed-no ecolabel. 
+```{r BAP_data, echo=FALSE, include=FALSE}
 
-4.	Shrimp by processing
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION,
+         MBA, MSC, BAP) %>%
+  filter(is.na(MBA)) %>%
+  filter(is.na(MSC)) %>%
+  mutate(BAP_1 = ifelse(is.na(BAP), 2, 1)) %>%
+  left_join(key_spp.grp, by = "DSPPGRP") -> BAP.data
+
+# find which levels are available as pairs:
+BAP.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(BAP_1 == 1) %>%
+  summarize(n = n()) -> BAP_1.summary
+
+BAP.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(BAP_1 == 2) %>%
+  summarize(n = n()) -> BAP_2.summary
+
+common.levels <- intersect(unique(BAP_1.summary$`as.factor(DSPPGRP)`),
+                           unique(BAP_2.summary$`as.factor(DSPPGRP)`))
+
+BAP.data <- BAP.data[BAP.data$DSPPGRP %in% common.levels,]
+
+```
+
+
+### a.	Fresh
+
+```{r BAP_fresh, echo=FALSE}
+BAP.data %>% 
+  filter(DCONDITION == 2) -> BAP.fresh.data
+
+# find which levels are available as pairs:
+BAP.fresh.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(BAP_1 == 1) %>%
+  summarize(n = n()) -> BAP.fresh_1.summary
+
+BAP.fresh.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(BAP_1 == 2) %>%
+  summarize(n = n()) -> BAP.fresh_2.summary
+
+common.levels <- intersect(unique(BAP.fresh_1.summary$`as.factor(DSPPGRP)`),
+                           unique(BAP.fresh_2.summary$`as.factor(DSPPGRP)`))
+
+BAP.fresh.data <- BAP.fresh.data[BAP.fresh.data$DSPPGRP %in% common.levels,]
+
+
+```
+
+There aren't enough sample sizes to do meaningful comparison here.  
+Doing Bayesian "t-tests" for these groups independently:
+```{r BAP_tests_fresh, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/BAP_fresh_test_results.rds")){
+
+  BESTout.BAP.fresh <- vector(mode = "list", length = length(common.levels))
+  k <- 1
+  for (k in 1:length(common.levels)){
+    BAP.fresh.data %>% filter(DSPPGRP == as.numeric(common.levels[k])) %>%
+      select(BAP_1, PRICE) -> tmp
+    
+    tmp %>% filter(BAP_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    tmp %>% filter(BAP_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.BAP.fresh[[k]] <- BESTmcmc(y1, y2,
+                                         numSavedSteps = 10000,
+                                         burnInSteps = 5000,
+                                         thinSteps = 5,
+                                         parallel = TRUE)
+      
+    }
+  }
+  
+  saveRDS(BESTout.BAP.fresh, "RData/BAP_fresh_test_results.rds")
+} else {
+  BESTout.BAP.fresh <- readRDS("RData/BAP_fresh_test_results.rds")
+}
+
+p.dif.gt.0 <- unlist(lapply(BESTout.BAP.fresh, 
+                            FUN = function(x) {return(ifelse(!is.null(x), 
+                                                             summary(x)["muDiff", "%>compVal"], 
+                                                             NA))})) * 0.01
+
+p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+                            p = p.dif.gt.0)
+```
+
+```{r}
+ggplot(BAP.fresh.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = (PRICE), color = as.factor(BAP_1)))+
+  scale_color_discrete(labels = c("BAP", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  labs(x = "DSPPGRP", title = "Fresh") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = as.factor(DSPPGRP), 
+                y = max(MSC.fresh.data$PRICE), 
+                label = signif(p, 2)))
+
+```
+
+### Frozen products	
+
+```{r BAP_frozen, echo=FALSE}
+BAP.data %>% 
+  filter(DCONDITION == 5 | DCONDITION == 6) -> BAP.frozen.data
+
+# find which levels are available as pairs:
+BAP.frozen.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(BAP_1 == 1) %>%
+  summarize(n = n()) -> BAP.frozen_1.summary
+
+BAP.frozen.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(BAP_1 == 2) %>%
+  summarize(n = n()) -> BAP.frozen_2.summary
+
+common.levels <- intersect(unique(BAP.frozen_1.summary$`as.factor(DSPPGRP)`),
+                           unique(BAP.frozen_2.summary$`as.factor(DSPPGRP)`))
+
+BAP.frozen.data <- BAP.frozen.data[BAP.frozen.data$DSPPGRP %in% common.levels,]
+
+
+```
+
+```{r BAP_tests_frozen, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/BAP_frozen_test_results.rds")){
+
+  BESTout.BAP.frozen <- vector(mode = "list", length = length(common.levels))
+  k <- 1
+  for (k in 1:length(common.levels)){
+    BAP.frozen.data %>% filter(DSPPGRP == as.numeric(common.levels[k])) %>%
+      select(BAP_1, PRICE) -> tmp
+    
+    tmp %>% filter(BAP_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    tmp %>% filter(BAP_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.BAP.frozen[[k]] <- BESTmcmc(y1, y2,
+                                   numSavedSteps = 10000,
+                                   burnInSteps = 5000,
+                                   thinSteps = 5,
+                                   parallel = TRUE)
+      
+    }
+  }
+  
+  saveRDS(BESTout.BAP.frozen, "RData/BAP_frozen_test_results.rds")
+} else {
+  BESTout.BAP.frozen <- readRDS("RData/BAP_frozen_test_results.rds")
+}
+
+p.dif.gt.0 <- unlist(lapply(BESTout.BAP.frozen, 
+                            FUN = function(x) {return(ifelse(!is.null(x), 
+                                                             summary(x)["muDiff", "%>compVal"], 
+                                                             NA))})) * 0.01
+
+p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+                            p = p.dif.gt.0)
+```
+
+```{r}
+ggplot(BAP.frozen.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = (PRICE), color = as.factor(BAP_1)))+
+  scale_color_discrete(labels = c("BAP", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  labs(x = "DSPPGRP", title = "Frozen") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = as.factor(DSPPGRP), 
+                y = max(BAP.frozen.data$PRICE), 
+                label = signif(p, 2)))
+```
+
+
+
+#### Shelf-stable
+None of SS products had BAP certificate.  
+
+```{r BAP_ss_data, echo=FALSE}
+BAP.data %>% 
+  filter(DCONDITION == 7 | DCONDITION == 8) -> BAP.SS.data
+
+# find which levels are available as pairs:
+BAP.SS.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(BAP_1 == 1) %>%
+  summarize(n = n()) -> BAP.SS_1.summary
+
+BAP.SS.data %>% group_by(as.factor(DSPPGRP)) %>% 
+  filter(BAP_1 == 2) %>%
+  summarize(n = n()) -> BAP.SS_2.summary
+
+common.levels <- intersect(unique(BAP.SS_1.summary$`as.factor(DSPPGRP)`),
+                           unique(BAP.SS_2.summary$`as.factor(DSPPGRP)`))
+
+BAP.SS.data <- BAP.SS.data[BAP.SS.data$DSPPGRP %in% common.levels,]
+
+```
+
+
+```{r BAP_tests_SS, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/BAP_SS_test_results.rds")){
+
+  BESTout.BAP.SS <- vector(mode = "list", length = length(common.levels))
+  k <- 1
+  for (k in 1:length(common.levels)){
+    BAP.SS.data %>% filter(DSPPGRP == as.numeric(common.levels[k])) %>%
+      select(BAP_1, PRICE) -> tmp
+    
+    tmp %>% filter(BAP_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    tmp %>% filter(BAP_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.BAP.SS[[k]] <- BESTmcmc(y1, y2,
+                                   numSavedSteps = 10000,
+                                   burnInSteps = 5000,
+                                   thinSteps = 5,
+                                   parallel = TRUE)
+      
+    
+    }
+  }
+  
+  saveRDS(BESTout.BAP.SS, "RData/BAP_SS_test_results.rds")
+} else {
+  BESTout.BAP.SS <- readRDS("RData/BAP_SS_test_results.rds")
+}
+
+p.dif.gt.0 <- unlist(lapply(BESTout.BAP.SS, 
+                            FUN = function(x) {return(ifelse(!is.null(x), 
+                                                             summary(x)["muDiff", "%>compVal"], 
+                                                             NA))})) * 0.01
+
+p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+                            p = p.dif.gt.0)
+```
+
+
+```{r BAP_SS_plot, echo=FALSE}
+
+ggplot(BAP.SS.data) +
+  geom_boxplot(aes(x = as.factor(DSPPGRP), 
+                   y = (PRICE), color = as.factor(BAP_1)))+
+  scale_color_discrete(labels = c("BAP", "Others")) + 
+  guides(color = guide_legend(title = NULL)) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+                                   hjust = 1, size = 12)) +
+  labs(x = "DSPPGRP", title = "Shelf-stable") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = as.factor(DSPPGRP), 
+                y = max(BAP.SS.data$PRICE), 
+                label = signif(p, 2)))
+
+```
+	
+# 2.	What is the price of eco-labeled shrimp vs non-ecolabeled shrimp? 
+Filter by: 
+## A.	MSC - tiny shrimp, P. jordani (these are size tiny, fresh, wild-caught US and Canada) 
+
+```{r P_jordani_data, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP) %>%
+  filter(SPECIES == "Pandalus jordani") %>%
+  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) -> P.jordani.data
+
+# find which levels are available as pairs:
+P.jordani.data %>% 
+  filter(MSC_1 == 1) %>%
+  summarize(n = n()) -> MSC_P.jordani_1.summary
+
+P.jordani.data %>% 
+  filter(MSC_1 == 2) %>%
+  summarize(n = n()) -> MSC_P.jordani_2.summary
+
+
+```
+
+
+```{r P_jordani_tests_MSC, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/P_jordani_MSC_test_results.rds")){
+
+    P.jordani.data %>% filter(MSC_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    P.jordani.data %>% filter(MSC_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.P.jordani <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.P.jordani, "RData/P_jordani_MSC_test_results.rds")
+} else {
+  BESTout.P.jordani <- readRDS("RData/P_jordani_MSC_test_results.rds")
+}
+
+p.dif.gt.0 <- summary(BESTout.P.jordani)["muDiff", "%>compVal"] * 0.01
+
+p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+```
+
+
+```{r P_jordani_tests_MSC_plot, echo=FALSE}
+
+ggplot(P.jordani.data) +
+  geom_boxplot(aes(x = as.factor(MSC_1), 
+                   y = (PRICE))) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("MSC", "non-MSC")) +
+  labs(x = "", title = "P. jordani") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = 1, 
+                y = max(P.jordani.data$PRICE), 
+                label = signif(p, 2)))
+
+```
+
+
+
+## B.	MBA - white shrimp. L. setiferus  (only one size; fresh, wild caught US & Canada)
+
+```{r MBA_L_setiferus, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP) %>%
+  filter(SPECIES == "Litopenaeus setiferus") %>%
+  filter(is.na(MSC))  %>% # remove MSC certified
+  filter(is.na(BAP))  %>% # remove BAP certified
+  mutate(MBA_1_2 = ifelse(is.na(MBA), 2, 
+                          ifelse((MBA == 1 | MBA == 2), 1, 2)))  -> L.setiferus.data
+
+# find which levels are available as pairs:
+L.setiferus.data %>% 
+  filter(MBA_1_2 == 1) %>%
+  summarize(n = n()) -> MBA_L.setiferus_1.summary
+
+L.setiferus.data %>% 
+  filter(MBA_1_2 == 2) %>%
+  summarize(n = n()) -> MBA_L.setiferus_2.summary
+
+
+```
+
+
+```{r MBA_L_setiferus_test, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/L_setiferus_test_results.rds")){
+
+    L.setiferus.data %>% filter(MBA_1_2 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    L.setiferus.data %>% filter(MBA_1_2 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.L.setiferus <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.L.setiferus, "RData/L_setiferus_test_results.rds")
+} else {
+  BESTout.L.setiferus <- readRDS("RData/L_setiferus_test_results.rds")
+}
+
+p.dif.gt.0 <- summary(BESTout.L.setiferus)["muDiff", "%>compVal"] * 0.01
+
+p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+```
+
+
+```{r L_setiferus_tests_MBA_plot, echo=FALSE}
+
+ggplot(L.setiferus.data) +
+  geom_boxplot(aes(x = as.factor(MBA_1_2), 
+                   y = (PRICE))) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("MBA 1&2", "Other")) +
+  labs(x = "", title = "L. setiferus") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = 1, 
+                y = max(L.setiferus.data$PRICE), 
+                label = signif(p, 2)))
+
+```
+
+## C.	Fair Trade – white and blue shrimp; not giant size; fresh, wild; Del Pacifico product
+Northen white shrimp (*Litopenaeus setiferus*) and blue shrimp (*Litopenaeus stylirostris*). What is "Del Pacifico product"? 
+
+```{r FairTrade_L_setiferus, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, ECOLABEL, MBA, MSC, BAP) %>%
+  filter(SPECIES == "Litopenaeus setiferus" |
+           SPECIES == "Litopenaeus stylirostris") %>%
+  mutate(ECOLABEL_f = as.factor(ECOLABEL)) %>%
+  filter(is.na(MSC))  %>% # remove MSC certified
+  filter(is.na(BAP))  %>% # remove BAP certified
+  mutate(EL_1 = ifelse(is.na(ECOLABEL_f), 2, 1)) -> L.setiferus.FairTrade.data
+
+# find which levels are available as pairs:
+L.setiferus.FairTrade.data %>% 
+  filter(EL_1 == 1) %>%
+  summarize(n = n()) ->L.setiferus.FairTrade_1.summary
+
+L.setiferus.FairTrade.data %>% 
+  filter(EL_1 == 2) %>%
+  summarize(n = n()) -> L.setiferus.FairTrade_2.summary
+
+
+```
+
+
+```{r FairTrade_L_setiferus_FairTrade_test, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/L_setiferus_FairTrade_test_results.rds")){
+
+    L.setiferus.FairTrade.data %>% filter(EL_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    L.setiferus.FairTrade.data %>% filter(EL_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.L.setiferus.FairTrade <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.L.setiferus.FairTrade, "RData/L_setiferus_FairTrade_test_results.rds")
+} else {
+  BESTout.L.setiferus.FairTrade <- readRDS("RData/L_setiferus_FairTrade_test_results.rds")
+}
+
+p.dif.gt.0 <- summary(BESTout.L.setiferus.FairTrade)["muDiff", "%>compVal"] * 0.01
+
+p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+```
+
+
+```{r L_setiferus_tests_FairTrade_plot, echo=FALSE}
+
+ggplot(L.setiferus.FairTrade.data) +
+  geom_boxplot(aes(x = as.factor(EL_1), 
+                   y = (PRICE))) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("Fair trade", "Other")) +
+  labs(x = "", title = "L. setiferus") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = 1, 
+                y = max(L.setiferus.FairTrade.data$PRICE), 
+                label = signif(p, 2)))
+
+```
+
+
+## D.	BAP whiteleg shrimp (farmed)
+```{r BAP_L_vannamei, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP) %>%
+  filter(SPECIES == "Litopenaeus vannamei") %>%
+  filter(is.na(MSC))  %>% # remove MSC certified
+  filter(is.na(MBA))  %>% # remove BAP certified
+  mutate(BAP_1 = ifelse(is.na(BAP), 2, 1)) -> L.vannamei.BAP.data
+
+# find which levels are available as pairs:
+L.vannamei.BAP.data %>% 
+  filter(BAP_1 == 1) %>%
+  summarize(n = n()) ->L.vannamei.BAP_1.summary
+
+L.vannamei.BAP.data %>% 
+  filter(BAP_1 == 2) %>%
+  summarize(n = n()) -> L.vannamei.BAP_2.summary
+
+
+```
+
+
+```{r BAP_L_vannamei_test, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/L_vannamei_BAP_test_results.rds")){
+
+    L.vannamei.BAP.data %>% filter(BAP_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    L.vannamei.BAP.data %>% filter(BAP_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.L.bannamei_BAP <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.L.bannamei_BAP, "RData/L_vannamei_BAP_test_results.rds")
+} else {
+  BESTout.L.bannamei_BAP <- readRDS("RData/L_vannamei_BAP_test_results.rds")
+}
+
+p.dif.gt.0 <- summary(BESTout.L.setiferus.FairTrade)["muDiff", "%>compVal"] * 0.01
+
+p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+```
+
+
+```{r BAP_L_vannamei_test_plot, echo=FALSE}
+
+ggplot(L.vannamei.BAP.data) +
+  geom_boxplot(aes(x = as.factor(BAP_1), 
+                   y = (PRICE))) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("BAP", "Other")) +
+  labs(x = "", title = "L. vannamei") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = 1, 
+                y = max(L.vannamei.BAP.data$PRICE), 
+                label = signif(p, 2)))
+
+```
+
+
+## E.	BAP giant tiger prawn (farmed)
+Please compare price/lb of the same species, size and fresh/farmed with & w/o these labels
+
+*Penaeus monodon*
+```{r P_monodon_data, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP) %>%
+  filter(SPECIES == "Penaeus monodon") %>%
+  filter(is.na(MSC))  %>% # remove MSC certified
+  filter(is.na(MBA))  %>% # remove BAP certified
+  mutate(BAP_1 = ifelse(is.na(BAP), 2, 1)) -> P.monodon.BAP.data
+
+# find which levels are available as pairs:
+P.monodon.BAP.data %>% 
+  filter(BAP_1 == 1) %>%
+  summarize(n = n()) ->P.monodon.BAP_1.summary
+
+P.monodon.BAP.data %>% 
+  filter(BAP_1 == 2) %>%
+  summarize(n = n()) -> P.monodon.BAP_2.summary
+
+```
+
+
+
+```{r BAP_P_monodon_test, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/P_monodon_BAP_test_results.rds")){
+
+    P.monodon.BAP.data %>% filter(BAP_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    P.monodon.BAP.data %>% filter(BAP_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.P.monodon_BAP <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.P.monodon_BAP, "RData/P_monodon_BAP_test_results.rds")
+} else {
+  BESTout.P.monodon_BAP <- readRDS("RData/P_monodon_BAP_test_results.rds")
+}
+
+p.dif.gt.0 <- summary(BESTout.P.monodon_BAP)["muDiff", "%>compVal"] * 0.01
+
+p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+```
+
+
+```{r BAP_P_monodon_test_plot, echo=FALSE}
+
+ggplot(P.monodon.BAP.data) +
+  geom_boxplot(aes(x = as.factor(BAP_1), 
+                   y = (PRICE))) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("BAP", "Other")) +
+  labs(x = "", title = "P. monodon") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = 1, 
+                y = max(P.monodon.BAP.data$PRICE), 
+                label = signif(p, 2)))
+
+```
+
+
+# 3.	Litopenaeus (white or whiteleg shrimp) - price for wild-ecolabel; wild-no ecolabel; farmed- ecolabel; farmed-no ecolabel. 
+*Litopenaeus setiferus* and *Litopenaeus vannamei*
+
+Wild ecolabel vs. Wild no ecolabel vs. farmed ecolabel vs. farmed no ecolabel
+```{r Litopenaeus_data, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP, PROD_METHOD, ECOLABEL, WILD, FARMED) %>%
+  filter(SPECIES == "Litopenaeus setiferus" | 
+           SPECIES == "Litopenaeus vannamei") %>%
+  mutate(PROD_METHOD_f = as.factor(PROD_METHOD),
+         ECOLABEL_f = as.factor(ECOLABEL),
+         ECOLABEL_I = ifelse(is.na(ECOLABEL), 0, 1),
+         WILD_I = ifelse(is.na(WILD), 0, 1)) %>%
+  mutate(GRP = ifelse((WILD_I == 1 & ECOLABEL_I == 1), 1,   # wild and ecolabel
+                      ifelse((WILD_I == 1 & ECOLABEL_I == 0), 2,   # wild and non-ecolabel
+                             ifelse((WILD_I == 0 & ECOLABEL_I == 1), 3, 4)))) -> Litopenaeus.data
+
+# find which levels are available as pairs:
+Litopenaeus.data %>% 
+  filter(GRP == 1) %>%
+  summarize(n = n()) ->Litopenaeus_data_1.summary
+
+Litopenaeus.data %>% 
+  filter(GRP == 2) %>%
+  summarize(n = n()) -> PLitopenaeus_data_2.summary
+
+Litopenaeus.data %>% 
+  filter(GRP == 3) %>%
+  summarize(n = n()) ->Litopenaeus_data_3.summary
+
+Litopenaeus.data %>% 
+  filter(GRP == 4) %>%
+  summarize(n = n()) -> PLitopenaeus_data_4.summary
+
+
+```
+
+
+
+```{r Litopenaeus_data_test, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/Litopenaeus_test_results.rds")){
+
+    Litopenaeus.data %>% filter(GRP == 1) %>% 
+      pull(PRICE) -> y1
+    
+    Litopenaeus.data %>% filter(GRP == 2) %>% 
+      pull(PRICE) -> y2
+    
+    Litopenaeus.data %>% filter(GRP == 3) %>% 
+      pull(PRICE) -> y3
+    
+    Litopenaeus.data %>% filter(GRP == 4) %>% 
+      pull(PRICE) -> y4
+    
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.P.monodon_BAP <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.P.monodon_BAP, "RData/Litopenaeus_test_results.rds")
+} else {
+  BESTout.P.monodon_BAP <- readRDS("RData/Litopenaeus_test_results.rds")
+}
+
+p.dif.gt.0 <- summary(BESTout.P.monodon_BAP)["muDiff", "%>compVal"] * 0.01
+
+p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+```
+
+
+```{r BAP_P_monodon_test_plot, echo=FALSE}
+
+ggplot(P.monodon.BAP.data) +
+  geom_boxplot(aes(x = as.factor(BAP_1), 
+                   y = (PRICE))) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("BAP", "Other")) +
+  labs(x = "", title = "P. monodon") + 
+  geom_text(data = p.dif.gt.0.df,
+            aes(x = 1, 
+                y = max(P.monodon.BAP.data$PRICE), 
+                label = signif(p, 2)))
+
+```
+
+# 4.	Shrimp by processing
 All penaeid shrimp - Filter by processing “head on”, “headless”, “tail on”, “tail off”, and “cooked”
 	Please compare price/lb 
