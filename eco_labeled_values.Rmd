@@ -9,6 +9,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(ggplot2)
 library(BEST)   # for Bayesian t tests
+library(BANOVA)  # Bayesian ANOVAs
 ```
 
 Categorical comparisons – product (with eco-label attribute) vs price
@@ -1195,14 +1196,14 @@ main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
                       ifelse((WILD_I == 1 & ECOLABEL_I == 0), 2,   # wild and non-ecolabel
                              ifelse((WILD_I == 0 & ECOLABEL_I == 1), 3, 4)))) -> Litopenaeus.data
 
-# find which levels are available as pairs:
+# sample sizes for different groups:
 Litopenaeus.data %>% 
   filter(GRP == 1) %>%
   summarize(n = n()) ->Litopenaeus_data_1.summary
 
 Litopenaeus.data %>% 
   filter(GRP == 2) %>%
-  summarize(n = n()) -> PLitopenaeus_data_2.summary
+  summarize(n = n()) -> Litopenaeus_data_2.summary
 
 Litopenaeus.data %>% 
   filter(GRP == 3) %>%
@@ -1210,9 +1211,23 @@ Litopenaeus.data %>%
 
 Litopenaeus.data %>% 
   filter(GRP == 4) %>%
-  summarize(n = n()) -> PLitopenaeus_data_4.summary
+  summarize(n = n()) -> Litopenaeus_data_4.summary
 
+# Need to put PRICE and GRP in a long format:
+Litopenaeus.data %>% select(PRICE, GRP) %>%
+  #mutate(GRP_f = as.factor(GRP)) %>%
+  gather(GRP, PRICE) %>%
+  mutate(GRP_f = as.factor(GRP)) -> Litopenaeus.long
 
+Litopenaeus.long$GRP_f <- as.factor(Litopenaeus.long$GRP)
+
+Litopenaeus.long$ID <- seq(from = 1, to = nrow(Litopenaeus.long))
+
+tmp <- BANOVA.Normal(l1_formula = PRICE ~ GRP_f, 
+                     data = data.frame(Litopenaeus.long),
+                     id = Litopenaeus.long$ID,
+                     l1_hyper = c(1, 1, 1))
+  
 ```
 
 
