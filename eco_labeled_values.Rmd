@@ -686,10 +686,10 @@ if (!file.exists("RData/BAP_frozen_test_results.rds")){
     
     if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
       BESTout.BAP.frozen[[k]] <- BESTmcmc(y1, y2,
-                                   numSavedSteps = 10000,
-                                   burnInSteps = 5000,
-                                   thinSteps = 5,
-                                   parallel = TRUE)
+                                          numSavedSteps = 10000,
+                                          burnInSteps = 5000,
+                                          thinSteps = 5,
+                                          parallel = TRUE)
       
     }
   }
