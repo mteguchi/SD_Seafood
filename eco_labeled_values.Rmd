@@ -3,13 +3,53 @@ title: "Examination of the value of eco-labeled products"
 output: word_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, echo=FALSE}
 rm(list=ls())
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(ggplot2)
 library(BEST)   # for Bayesian t tests
 library(BANOVA)  # Bayesian ANOVAs
+
+signif.fun <- function(x) return(ifelse((x[2] < 0 & x[3] < 0), "-",
+                                               ifelse((x[2] < 0 & x[3] > 0), ".",
+                                                      ifelse((x[2] > 0 & x[3] > 0), "+"))))
+
+get.dif.stats <- function(x){
+  mu.dif.lo <- unlist(lapply(x, 
+                             FUN = function(x) {return(ifelse(!is.null(x), 
+                                                              summary(x)["muDiff", "HDIlo"], 
+                                                              NA))})) 
+  
+  mu.dif.up <- unlist(lapply(x, 
+                             FUN = function(x) {return(ifelse(!is.null(x), 
+                                                              summary(x)["muDiff", "HDIup"], 
+                                                              NA))}) )
+  
+  mu.dif.median <- unlist(lapply(x, 
+                                 FUN = function(x) {return(ifelse(!is.null(x), 
+                                                                  summary(x)["muDiff", "median"], 
+                                                                  NA))}) )
+  
+  
+  mu.dif.df <- data.frame(median = mu.dif.median, 
+                          HDIlo = mu.dif.lo, 
+                          HDIup = mu.dif.up)
+
+  mu.dif <-   apply(mu.dif.df, 
+                    MARGIN = 1, 
+                    FUN = signif.fun)
+  
+  # mu.dif <- apply(mu.dif.df, 
+  #                 MARGIN = 1, 
+  #                 FUN = function(x){return(ifelse((x[2] < 0 & x[3] < 0), -1,
+  #                                                 ifelse((x[2] < 0 & x[3] > 0), 0,
+  #                                                        ifelse((x[2] > 0 & x[3] > 0), 1))))})
+  
+  mu.dif.df$signif <- mu.dif     
+  return(mu.dif.df)
+  
+}
 ```
 
 Categorical comparisons – product (with eco-label attribute) vs price
@@ -96,7 +136,6 @@ key_spp.grp <- read.csv(file = "data/SDSEAFOOD_KEY_DSPPGRP_02012019_1.csv")
 
 
 # 1.	What is the average price of eco-labeled seafood vs non-ecolabeled seafood of the same species?
-	Filter by: 
 
 ## A.	Monterey Bay Aquarium (MBA) Green/Yellow (fresh products only; this is the Whole Foods “effect”)
 Should I take out products with other ecolabels? 
@@ -134,9 +173,7 @@ MBA.data <- MBA.data[MBA.data$DSPPGRP %in% common.levels,]
 
 ```
 
-Interesting to note that variability for MBA 1 & 2 is less than that for others. We may compare that statistically but it's pretty obvious...
 
-Doing Bayesian "t-tests" for these groups independently:
 ```{r MBA_tests, echo=FALSE, include=FALSE, cache=TRUE}
 
 if (!file.exists("RData/MBA_test_results.rds")){
@@ -168,34 +205,51 @@ if (!file.exists("RData/MBA_test_results.rds")){
   BESTout <- readRDS("RData/MBA_test_results.rds")
 }
 
-p.dif.gt.0 <- unlist(lapply(BESTout, 
-                            FUN = function(x) {return(ifelse(!is.null(x), 
-                                                             summary(x)["muDiff", "%>compVal"], 
-                                                             NA))})) * 0.01
+mu.dif.BEST <- get.dif.stats(BESTout)
 
-p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
-                            p = p.dif.gt.0)
+mu.dif.BEST$DSPPGRP <- common.levels
+
+MBA.data %>% group_by(MBA_1_2, DSPPGRP) %>% summarize(n = n()) -> sample.size 
+
+sample.size %>% filter(MBA_1_2 == 1) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP1 = DSPPGRP,
+            n1 = n) -> sample.size.1
+
+sample.size %>% filter(MBA_1_2 == 2) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP2 = DSPPGRP,
+            n2 = n)-> sample.size.2
+
+sample.size.wide <- cbind(sample.size.1, sample.size.2)
 ```
 
  
 
-```{r plot_MBA, echo=FALSE, fig.cap="Values on top indicate the probability that the means are different for each group."}
+```{r plot_MBA, echo=FALSE, warning = FALSE, fig.width=8, fig.height=6, fig.cap="Comparison of the price of seafood products between those with and without MBA 1 and 2 labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Symbols on top indicate whether the mean for MBA labels was greater (+), smaller (-), or not different (.) from those without the labels for each group. Values indicate the sample sizes."}
 
 ggplot(MBA.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = (PRICE), 
+                   y = PRICE, 
                    color = as.factor(MBA_1_2)))+
   scale_color_discrete(labels = c("MBA 1&2", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "MBA 1&2, Fresh products only") +
-  geom_text(data = p.dif.gt.0.df,
+  labs(x = "DSPPGRP", 
+       title = "MBA 1&2, Fresh products only") +
+  geom_text(data = sample.size.wide,
+            aes(x = as.factor(DSPPGRP1), 
+                y = ceiling(max(MBA.data$PRICE)),
+                label = paste(n1, n2, sep = "/")),
+            size = 3) + 
+  geom_text(data = mu.dif.BEST,
             aes(x = as.factor(DSPPGRP), 
-                y = max(MBA.data$PRICE), 
-                label = signif(p, 2)))
+                y = max(MBA.data$PRICE) + 10, 
+                label = signif),
+            size = 10)
 
 ```
+
+The mean price was higher with MBA certificate than without for species groups 5 (groupers, seabass, snappers and rockfish), 10 (other marine and imitation fish), 11 (salmon), and 15 (tunas, jacks, sportfish and sharks), whereas it was less with MBA certificate than without for the species group 6 (Halibuts and flatfishes).  No difference was found for the species group 3 (Cods and cod-like).  There were not enough data for MBA for groups 4 (crabs and lobster), 9 (other invertebrates), and 12 (schooling fish). 
 
 ## B.	Marine Stewardship Council (MSC) certification
 ```{r MSC_data, echo=FALSE, include=FALSE}
@@ -222,10 +276,21 @@ common.levels <- intersect(unique(MSC_1.summary$`as.factor(DSPPGRP)`),
 
 MSC.data <- MSC.data[MSC.data$DSPPGRP %in% common.levels,]
 
+MSC.data %>% group_by(MSC_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
+
+sample.size %>% filter(MSC_1 == 1) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP1 = DSPPGRP,
+            n1 = n) -> sample.size.1
+
+sample.size %>% filter(MSC_1 == 2) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP2 = DSPPGRP,
+            n2 = n)-> sample.size.2
+
+sample.size.wide <- cbind(sample.size.1, sample.size.2)
+
 ```
 
 
-Doing Bayesian "t-tests" for these groups independently:
 ```{r MSC_tests, echo=FALSE, include=FALSE, cache=TRUE}
 
 if (!file.exists("RData/MSC_test_results.rds")){
@@ -258,34 +323,41 @@ if (!file.exists("RData/MSC_test_results.rds")){
   
 }  
 
-p.dif.gt.0 <- unlist(lapply(BESTout.MSC, 
-                            FUN = function(x) {return(ifelse(!is.null(x), 
-                                                             summary(x)["muDiff", "%>compVal"], 
-                                                             NA))})) * 0.01
+mu.dif.MSC <- get.dif.stats(BESTout.MSC)
 
-p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
-                            p = p.dif.gt.0)
+mu.dif.MSC$DSPPGRP <- common.levels
+
 ```
 
-```{r}
+```{r plot_MSC, echo=FALSE, warning = FALSE,fig.width=8, fig.height=6, fig.cap="Comparison of the price of seafood products between those with and without MSC. Y axis is in the base 10 logarithmic scale.  A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR.  Symbols on top indicate whether the mean for MBA labels was greater (+), smaller (-), or not different (.) from those without the labels for each group. Values indicate the sample sizes."}
+
 ggplot(MSC.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = (PRICE), color = as.factor(MSC_1)))+
+                   y = log10(PRICE), 
+                   color = as.factor(MSC_1)))+
   scale_color_discrete(labels = c("MSC", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", main = "MSC")+ 
-  geom_text(data = p.dif.gt.0.df,
+  labs(x = "DSPPGRP", y = "log10(price)", title = "MSC") + 
+  geom_text(data = sample.size.wide,
+            aes(x = as.factor(DSPPGRP1), 
+                y = log10(ceiling(max(MSC.data$PRICE))),
+                label = paste(n1, n2, sep = "/")),
+            size = 3) + 
+  geom_text(data = mu.dif.MSC,
             aes(x = as.factor(DSPPGRP), 
-                y = max(MSC.data$PRICE), 
-                label = signif(p, 2)))
+                y = log10(ceiling(max(MSC.data$PRICE))) + 0.5, 
+                label = signif),
+            size = 10)
 ```
+
+The mean price was higher with MSC than without for all species groups except 2 (bivalves) and 11 (salmon). 
 
 
 ### Fresh; frozen; shelf stable products run separately 
 #### Fresh
-```{r}
+```{r Fresh_data, echo=FALSE, include=FALSE}
 MSC.data %>% 
   filter(DCONDITION == 2) %>% 
   filter(is.na(MBA)) %>%
@@ -306,11 +378,20 @@ common.levels <- intersect(unique(MSC.fresh_1.summary$`as.factor(DSPPGRP)`),
 
 MSC.fresh.data <- MSC.fresh.data[MSC.fresh.data$DSPPGRP %in% common.levels,]
 
+MSC.fresh.data %>% group_by(MSC_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
 
+sample.size %>% filter(MSC_1 == 1) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP1 = DSPPGRP,
+            n1 = n) -> sample.size.1
+
+sample.size %>% filter(MSC_1 == 2) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP2 = DSPPGRP,
+            n2 = n)-> sample.size.2
+
+sample.size.wide <- cbind(sample.size.1, sample.size.2)
 ```
 
 
-Doing Bayesian "t-tests" for these groups independently:
 ```{r MSC_tests_fresh, echo=FALSE, include=FALSE, cache=TRUE}
 
 if (!file.exists("RData/MSC_fresh_test_results.rds")){
@@ -342,35 +423,47 @@ if (!file.exists("RData/MSC_fresh_test_results.rds")){
   BESTout.MSC.fresh <- readRDS("RData/MSC_fresh_test_results.rds")
 }
 
-p.dif.gt.0 <- unlist(lapply(BESTout.MSC.fresh, 
-                            FUN = function(x) {return(ifelse(!is.null(x), 
-                                                             summary(x)["muDiff", "%>compVal"], 
-                                                             NA))})) * 0.01
+mu.dif.MSC.fresh <- get.dif.stats(BESTout.MSC.fresh)
 
-p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
-                            p = p.dif.gt.0)
+mu.dif.MSC.fresh$DSPPGRP <- common.levels
+
+# p.dif.gt.0 <- unlist(lapply(BESTout.MSC.fresh, 
+#                             FUN = function(x) {return(ifelse(!is.null(x), 
+#                                                              summary(x)["muDiff", "%>compVal"], 
+#                                                              NA))})) * 0.01
+# 
+# p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+#                             p = p.dif.gt.0)
 ```
 
-```{r}
+```{r plot_MSC_Fresh, echo=FALSE, warning = FALSE, fig.width=8, fig.height=6, fig.cap="Comparison of the price of fresh seafood products between those with and without MSC labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Symbols on top indicate whether the mean for MBA labels was greater (+), smaller (-), or not different (.) from those without the labels for each group. Values indicate the sample sizes."}
 ggplot(MSC.fresh.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = (PRICE), color = as.factor(MSC_1)))+
+                   y = PRICE, color = as.factor(MSC_1)))+
   scale_color_discrete(labels = c("MSC", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Fresh") + 
-  geom_text(data = p.dif.gt.0.df,
+  labs(x = "DSPPGRP", title = "MSC Fresh") + 
+   geom_text(data = sample.size.wide,
+            aes(x = as.factor(DSPPGRP1), 
+                y = (ceiling(max(MSC.fresh.data$PRICE))),
+                label = paste(n1, n2, sep = "/")),
+            size = 3) + 
+  geom_text(data = mu.dif.MSC.fresh,
             aes(x = as.factor(DSPPGRP), 
-                y = max(MSC.fresh.data$PRICE), 
-                label = signif(p, 2)))
+                y = max(MSC.fresh.data$PRICE) + 10, 
+                label = signif),
+            size = 10)
 
 ```
+
+For fresh products, the mean price was higher with MSC than without for the species group 6 (halibuts and flatfishes) but no difference was detected for the species groups 2 (bivalves), 3 (cods and cod-likes), and 11 (salmon), whereas there was not enough data for the species group 15 (tunas, jacks, sportfish and sharks). 
 
 
 #### Frozen
 
-```{r MSC_frozen, echo=FALSE}
+```{r MSC_frozen, echo=FALSE, include=FALSE}
 MSC.data %>% 
   filter(DCONDITION == 5 | DCONDITION == 6) %>% 
   filter(is.na(MBA)) %>%
@@ -390,7 +483,17 @@ common.levels <- intersect(unique(MSC.frozen_1.summary$`as.factor(DSPPGRP)`),
 
 MSC.frozen.data <- MSC.frozen.data[MSC.frozen.data$DSPPGRP %in% common.levels,]
 
+MSC.frozen.data %>% group_by(MSC_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
 
+sample.size %>% filter(MSC_1 == 1) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP1 = DSPPGRP,
+            n1 = n) -> sample.size.1
+
+sample.size %>% filter(MSC_1 == 2) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP2 = DSPPGRP,
+            n2 = n)-> sample.size.2
+
+sample.size.wide <- cbind(sample.size.1, sample.size.2)
 ```
 
 ```{r MSC_tests_frozen, echo=FALSE, include=FALSE, cache=TRUE}
@@ -424,34 +527,39 @@ if (!file.exists("RData/MSC_frozen_test_results.rds")){
   BESTout.MSC.frozen <- readRDS("RData/MSC_frozen_test_results.rds")
 }
 
-p.dif.gt.0 <- unlist(lapply(BESTout.MSC.frozen, 
-                            FUN = function(x) {return(ifelse(!is.null(x), 
-                                                             summary(x)["muDiff", "%>compVal"], 
-                                                             NA))})) * 0.01
 
-p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
-                            p = p.dif.gt.0)
+mu.dif.MSC.frozen <- get.dif.stats(BESTout.MSC.frozen)
+
+mu.dif.MSC.frozen$DSPPGRP <- common.levels
+
 ```
 
-```{r MSC_frozen_plot, echo=FALSE}
+```{r MSC_frozen_plot, echo=FALSE, fig.width=8, fig.height=6, fig.cap="Comparison of the price of frozen seafood products between those with and without MSC labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Symbols on top indicate whether the mean for MBA labels was greater (+), smaller (-), or not different (.) from those without the labels for each group. Values indicate the sample sizes."}
 ggplot(MSC.frozen.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = (PRICE), color = as.factor(MSC_1)))+
+                   y = PRICE, color = as.factor(MSC_1)))+
   scale_color_discrete(labels = c("MSC", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Frozen") + 
-  geom_text(data = p.dif.gt.0.df,
+  labs(x = "DSPPGRP", title = "MSC Frozen") + 
+  geom_text(data = sample.size.wide,
+            aes(x = as.factor(DSPPGRP1), 
+                y = (ceiling(max(MSC.frozen.data$PRICE))),
+                label = paste(n1, n2, sep = "/")),
+            size = 3) + 
+  geom_text(data = mu.dif.MSC.frozen,
             aes(x = as.factor(DSPPGRP), 
-                y = max(MSC.frozen.data$PRICE), 
-                label = signif(p, 2)))
+                y = max(MSC.frozen.data$PRICE) + 10, 
+                label = signif),
+            size = 10)
 ```
 
+For frozen products, the mean price was higher with MSC than without for the species groups 3 (cods and cod-likes), 5 (groupers, seabass, snappers, and rockfishes), and 15 (tunas, jacks, sportfish and sharks), whereas they were less for the species group 11 (salmon).  No difference was found for others. 
 
 
 #### Shelf-stable
-```{r MSC_ss, echo=FALSE}
+```{r MSC_ss, echo=FALSE, include=FALSE}
 MSC.data %>% 
   filter(DCONDITION == 7 | DCONDITION == 8) %>% 
   filter(is.na(MBA)) %>%
@@ -470,6 +578,19 @@ common.levels <- intersect(unique(MSC.SS_1.summary$`as.factor(DSPPGRP)`),
                            unique(MSC.SS_2.summary$`as.factor(DSPPGRP)`))
 
 MSC.SS.data <- MSC.SS.data[MSC.SS.data$DSPPGRP %in% common.levels,]
+
+
+MSC.SS.data %>% group_by(MSC_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
+
+sample.size %>% filter(MSC_1 == 1) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP1 = DSPPGRP,
+            n1 = n) -> sample.size.1
+
+sample.size %>% filter(MSC_1 == 2) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP2 = DSPPGRP,
+            n2 = n)-> sample.size.2
+
+sample.size.wide <- cbind(sample.size.1, sample.size.2)
 
 ```
 
@@ -506,37 +627,45 @@ if (!file.exists("RData/MSC_SS_test_results.rds")){
   BESTout.MSC.SS <- readRDS("RData/MSC_SS_test_results.rds")
 }
 
-p.dif.gt.0 <- unlist(lapply(BESTout.MSC.SS, 
-                            FUN = function(x) {return(ifelse(!is.null(x), 
-                                                             summary(x)["muDiff", "%>compVal"], 
-                                                             NA))})) * 0.01
 
-p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
-                            p = p.dif.gt.0)
+mu.dif.MSC.SS <- get.dif.stats(BESTout.MSC.SS)
+
+mu.dif.MSC.SS$DSPPGRP <- common.levels
+
 ```
 
 
-```{r MSC_SS_plot, echo=FALSE}
+```{r MSC_SS_plot, echo=FALSE, warning=FALSE, fig.width=8, fig.height=6, fig.cap="Comparison of the price of shelf-stable seafood products between those with and without MSC labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Symobls on top indicate whether the mean for MBA labels was greater (+), smaller (-), or not different (.) from those without the labels for each group. Values indicate the sample sizes."}
 
 ggplot(MSC.SS.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = (PRICE), color = as.factor(MSC_1)))+
+                   y = PRICE, color = as.factor(MSC_1)))+
   scale_color_discrete(labels = c("MSC", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Shelf-stable") + 
-  geom_text(data = p.dif.gt.0.df,
+  labs(x = "DSPPGRP", title = "MSC Shelf-stable") + 
+  geom_text(data = sample.size.wide,
+            aes(x = as.factor(DSPPGRP1), 
+                y = (ceiling(max(MSC.SS.data$PRICE))),
+                label = paste(n1, n2, sep = "/")),
+            size = 3) + 
+  geom_text(data = mu.dif.MSC.SS,
             aes(x = as.factor(DSPPGRP), 
-                y = max(MSC.SS.data$PRICE), 
-                label = signif(p, 2)))
+                y = max(MSC.SS.data$PRICE) + 10, 
+                label = signif),
+            size = 10)
 
 ```
 
+For shelf-stable products, the mean price was higher with MSC than without for the species groups 11 (salmon), 12 (schooling fish), and 15 (tunas, jacks, sportfish, and sharks), whereas it was less for the species group 2 (crabs and lobster).  Not enough data were available for 13 (shrimp).   
+
 
 ## C.	Best Aquaculture Practices (BAP)
-	Identify the species that have these labels – if this isn’t straightforward, we will help
-	Please compare average price/lb of the same species with and without these labels, within product type category (fresh w eco-label vs. fresh non-ecolabel, frozen w ecolabel vs. frozen without ecolabel, shelf stable w ecolabel vs. shelf stable without ecolabel)
+Identify the species that have these labels – if this isn’t straightforward, we will help.
+
+Please compare average price/lb of the same species with and without these labels, within product type category (fresh w eco-label vs. fresh non-ecolabel, frozen w ecolabel vs. frozen without ecolabel, shelf stable w ecolabel vs. shelf stable without ecolabel)
+
 ```{r BAP_data, echo=FALSE, include=FALSE}
 
 main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
@@ -566,7 +695,7 @@ BAP.data <- BAP.data[BAP.data$DSPPGRP %in% common.levels,]
 
 ### a.	Fresh
 
-```{r BAP_fresh, echo=FALSE}
+```{r BAP_fresh, echo=FALSE, include=FALSE}
 BAP.data %>% 
   filter(DCONDITION == 2) -> BAP.fresh.data
 
@@ -585,10 +714,20 @@ common.levels <- intersect(unique(BAP.fresh_1.summary$`as.factor(DSPPGRP)`),
 BAP.fresh.data <- BAP.fresh.data[BAP.fresh.data$DSPPGRP %in% common.levels,]
 
 
+BAP.fresh.data %>% group_by(BAP_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
+
+sample.size %>% filter(BAP_1 == 1) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP1 = DSPPGRP,
+            n1 = n) -> sample.size.1
+
+sample.size %>% filter(BAP_1 == 2) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP2 = DSPPGRP,
+            n2 = n)-> sample.size.2
+
+sample.size.wide <- cbind(sample.size.1, sample.size.2)
 ```
 
-There aren't enough sample sizes to do meaningful comparison here.  
-Doing Bayesian "t-tests" for these groups independently:
+
 ```{r BAP_tests_fresh, echo=FALSE, include=FALSE, cache=TRUE}
 
 if (!file.exists("RData/BAP_fresh_test_results.rds")){
@@ -620,34 +759,40 @@ if (!file.exists("RData/BAP_fresh_test_results.rds")){
   BESTout.BAP.fresh <- readRDS("RData/BAP_fresh_test_results.rds")
 }
 
-p.dif.gt.0 <- unlist(lapply(BESTout.BAP.fresh, 
-                            FUN = function(x) {return(ifelse(!is.null(x), 
-                                                             summary(x)["muDiff", "%>compVal"], 
-                                                             NA))})) * 0.01
 
-p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
-                            p = p.dif.gt.0)
+mu.dif.BAP.fresh <- get.dif.stats(BESTout.BAP.fresh)
+
+mu.dif.BAP.fresh$DSPPGRP <- common.levels
+
 ```
 
-```{r}
+```{r BAP_fresh_plot, echo=FALSE, warning=FALSE, fig.width=8, fig.height=6, fig.cap="Comparison of the price of fresh seafood products between those with and without BAP labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Symbols on top indicate whether the mean for MBA labels was greater (+), smaller (-), or not different (.) from those without the labels for each group. Values indicate the sample sizes."}
 ggplot(BAP.fresh.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = (PRICE), color = as.factor(BAP_1)))+
+                   y = PRICE, color = as.factor(BAP_1)))+
   scale_color_discrete(labels = c("BAP", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Fresh") + 
-  geom_text(data = p.dif.gt.0.df,
+  labs(x = "DSPPGRP", title = "BAP Fresh") + 
+   geom_text(data = sample.size.wide,
+            aes(x = as.factor(DSPPGRP1), 
+                y = (ceiling(max(BAP.fresh.data$PRICE))),
+                label = paste(n1, n2, sep = "/")),
+            size = 3) + 
+  geom_text(data = mu.dif.BAP.fresh,
             aes(x = as.factor(DSPPGRP), 
-                y = max(MSC.fresh.data$PRICE), 
-                label = signif(p, 2)))
+                y = max(BAP.fresh.data$PRICE) + 5, 
+                label = signif),
+            size = 10)
 
 ```
+
+There were only two available groups in this category (11: salmon and 14: tilapia and freshwater species) and the mean price was less with BAP for salmon and no difference was found for tilapia and freshwater species.  
 
 ### Frozen products	
 
-```{r BAP_frozen, echo=FALSE}
+```{r BAP_frozen, echo=FALSE, include=FALSE, warning=FALSE}
 BAP.data %>% 
   filter(DCONDITION == 5 | DCONDITION == 6) -> BAP.frozen.data
 
@@ -665,7 +810,17 @@ common.levels <- intersect(unique(BAP.frozen_1.summary$`as.factor(DSPPGRP)`),
 
 BAP.frozen.data <- BAP.frozen.data[BAP.frozen.data$DSPPGRP %in% common.levels,]
 
+BAP.frozen.data %>% group_by(BAP_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
 
+sample.size %>% filter(BAP_1 == 1) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP1 = DSPPGRP,
+            n1 = n) -> sample.size.1
+
+sample.size %>% filter(BAP_1 == 2) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP2 = DSPPGRP,
+            n2 = n)-> sample.size.2
+
+sample.size.wide <- cbind(sample.size.1, sample.size.2)
 ```
 
 ```{r BAP_tests_frozen, echo=FALSE, include=FALSE, cache=TRUE}
@@ -699,36 +854,48 @@ if (!file.exists("RData/BAP_frozen_test_results.rds")){
   BESTout.BAP.frozen <- readRDS("RData/BAP_frozen_test_results.rds")
 }
 
-p.dif.gt.0 <- unlist(lapply(BESTout.BAP.frozen, 
-                            FUN = function(x) {return(ifelse(!is.null(x), 
-                                                             summary(x)["muDiff", "%>compVal"], 
-                                                             NA))})) * 0.01
 
-p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
-                            p = p.dif.gt.0)
+mu.dif.BAP.frozen <- get.dif.stats(BESTout.BAP.frozen)
+
+mu.dif.BAP.frozen$DSPPGRP <- common.levels
+# 
+# p.dif.gt.0 <- unlist(lapply(BESTout.BAP.frozen, 
+#                             FUN = function(x) {return(ifelse(!is.null(x), 
+#                                                              summary(x)["muDiff", "%>compVal"], 
+#                                                              NA))})) * 0.01
+# 
+# p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+#                             p = p.dif.gt.0)
 ```
 
-```{r}
+```{r BAP_frozen_plot, echo=FALSE, warning=FALSE, fig.width=8, fig.height=6, fig.cap="Comparison of the price of frozen seafood products between those with and without BAP labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Symbols on top indicate whether the mean for MBA labels was greater (+), smaller (-), or not different (.) from those without the labels for each group. Values indicate the sample sizes."}
 ggplot(BAP.frozen.data) +
   geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = (PRICE), color = as.factor(BAP_1)))+
+                   y = PRICE, color = as.factor(BAP_1)))+
   scale_color_discrete(labels = c("BAP", "Others")) + 
   guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  theme(axis.text.x = element_text(angle = 0, vjust = 0.5, 
                                    hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Frozen") + 
-  geom_text(data = p.dif.gt.0.df,
+  labs(x = "DSPPGRP", title = "BAP Frozen") + 
+  geom_text(data = sample.size.wide,
+            aes(x = as.factor(DSPPGRP1), 
+                y = (ceiling(max(BAP.frozen.data$PRICE))),
+                label = paste(n1, n2, sep = "/")),
+            size = 3) + 
+  geom_text(data = mu.dif.BAP.frozen,
             aes(x = as.factor(DSPPGRP), 
-                y = max(BAP.frozen.data$PRICE), 
-                label = signif(p, 2)))
+                y = max(BAP.frozen.data$PRICE) + 5, 
+                label = signif),
+            size = 10)
 ```
 
+For frozen products with BAP labels, the mean price was higher with BAP than without for the species group 13 (shrimp), but less for the groups 2 (crabs and lobster) and 14 (tilapia and freshwater fishes).  There was not enough sample to compare for group 10 (other marine and imitation fish).     
 
 
 #### Shelf-stable
-None of SS products had BAP certificate.  
+None of SS products had BAP certificate.  So, no comparison made here. 
 
-```{r BAP_ss_data, echo=FALSE}
+```{r BAP_ss_data, echo=FALSE, include=FALSE, warning=FALSE}
 BAP.data %>% 
   filter(DCONDITION == 7 | DCONDITION == 8) -> BAP.SS.data
 
@@ -745,6 +912,18 @@ common.levels <- intersect(unique(BAP.SS_1.summary$`as.factor(DSPPGRP)`),
                            unique(BAP.SS_2.summary$`as.factor(DSPPGRP)`))
 
 BAP.SS.data <- BAP.SS.data[BAP.SS.data$DSPPGRP %in% common.levels,]
+
+BAP.SS.data %>% group_by(BAP_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
+
+sample.size %>% filter(BAP_1 == 1) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP1 = DSPPGRP,
+            n1 = n) -> sample.size.1
+
+sample.size %>% filter(BAP_1 == 2) %>% select(DSPPGRP, n) %>%
+  transmute(DSPPGRP2 = DSPPGRP,
+            n2 = n)-> sample.size.2
+
+sample.size.wide <- cbind(sample.size.1, sample.size.2)
 
 ```
 
@@ -781,32 +960,37 @@ if (!file.exists("RData/BAP_SS_test_results.rds")){
   BESTout.BAP.SS <- readRDS("RData/BAP_SS_test_results.rds")
 }
 
-p.dif.gt.0 <- unlist(lapply(BESTout.BAP.SS, 
-                            FUN = function(x) {return(ifelse(!is.null(x), 
-                                                             summary(x)["muDiff", "%>compVal"], 
-                                                             NA))})) * 0.01
 
-p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
-                            p = p.dif.gt.0)
+mu.dif.BAP.SS <- get.dif.stats(BESTout.BAP.SS)
+
+mu.dif.BAP.SS$DSPPGRP <- common.levels
+# 
+# p.dif.gt.0 <- unlist(lapply(BESTout.BAP.SS, 
+#                             FUN = function(x) {return(ifelse(!is.null(x), 
+#                                                              summary(x)["muDiff", "%>compVal"], 
+#                                                              NA))})) * 0.01
+# 
+# p.dif.gt.0.df <- data.frame(DSPPGRP = common.levels,
+#                             p = p.dif.gt.0)
 ```
 
 
-```{r BAP_SS_plot, echo=FALSE}
+<!-- ```{r BAP_SS_plot, echo=FALSE} -->
 
-ggplot(BAP.SS.data) +
-  geom_boxplot(aes(x = as.factor(DSPPGRP), 
-                   y = (PRICE), color = as.factor(BAP_1)))+
-  scale_color_discrete(labels = c("BAP", "Others")) + 
-  guides(color = guide_legend(title = NULL)) +
-  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
-                                   hjust = 1, size = 12)) +
-  labs(x = "DSPPGRP", title = "Shelf-stable") + 
-  geom_text(data = p.dif.gt.0.df,
-            aes(x = as.factor(DSPPGRP), 
-                y = max(BAP.SS.data$PRICE), 
-                label = signif(p, 2)))
+<!-- ggplot(BAP.SS.data) + -->
+<!--   geom_boxplot(aes(x = as.factor(DSPPGRP),  -->
+<!--                    y = (PRICE), color = as.factor(BAP_1)))+ -->
+<!--   scale_color_discrete(labels = c("BAP", "Others")) +  -->
+<!--   guides(color = guide_legend(title = NULL)) + -->
+<!--   theme(axis.text.x = element_text(angle = 90, vjust = 0.5,  -->
+<!--                                    hjust = 1, size = 12)) + -->
+<!--   labs(x = "DSPPGRP", title = "Shelf-stable") +  -->
+<!--   geom_text(data = p.dif.gt.0.df, -->
+<!--             aes(x = as.factor(DSPPGRP),  -->
+<!--                 y = max(BAP.SS.data$PRICE),  -->
+<!--                 label = signif(p, 2))) -->
 
-```
+<!-- ``` -->
 	
 # 2.	What is the price of eco-labeled shrimp vs non-ecolabeled shrimp? 
 Filter by: 
@@ -820,15 +1004,25 @@ main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
   mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) -> P.jordani.data
 
 # find which levels are available as pairs:
-P.jordani.data %>% 
-  filter(MSC_1 == 1) %>%
-  summarize(n = n()) -> MSC_P.jordani_1.summary
+# P.jordani.data %>% 
+#   filter(MSC_1 == 1) %>%
+#   summarize(n = n()) -> MSC_P.jordani_1.summary
+# 
+# P.jordani.data %>% 
+#   filter(MSC_1 == 2) %>%
+#   summarize(n = n()) -> MSC_P.jordani_2.summary
 
-P.jordani.data %>% 
-  filter(MSC_1 == 2) %>%
-  summarize(n = n()) -> MSC_P.jordani_2.summary
+P.jordani.data %>% group_by(MSC_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
 
-
+# sample.size %>% filter(MSC_1 == 1) %>% select(DSPPGRP, n) %>%
+#   transmute(DSPPGRP1 = DSPPGRP,
+#             n1 = n) -> sample.size.1
+# 
+# sample.size %>% filter(MSC_1 == 2) %>% select(DSPPGRP, n) %>%
+#   transmute(DSPPGRP2 = DSPPGRP,
+#             n2 = n)-> sample.size.2
+# 
+# sample.size.wide <- cbind(sample.size.1, sample.size.2)
 ```
 
 
@@ -856,30 +1050,39 @@ if (!file.exists("RData/P_jordani_MSC_test_results.rds")){
   BESTout.P.jordani <- readRDS("RData/P_jordani_MSC_test_results.rds")
 }
 
-p.dif.gt.0 <- summary(BESTout.P.jordani)["muDiff", "%>compVal"] * 0.01
+mu.dif.P.jordani <- summary(BESTout.P.jordani)["muDiff", c("median", "HDIlo", "HDIup")]
 
-p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+mu.dif.P.jordani$signif <- signif.fun(mu.dif.P.jordani)
+
 ```
 
 
-```{r P_jordani_tests_MSC_plot, echo=FALSE}
+```{r P_jordani_tests_MSC_plot, echo=FALSE, fig.width=8, fig.height=6, fig.cap="Comparison of the price of P. jordani between those with and without MSC labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
 
 ggplot(P.jordani.data) +
   geom_boxplot(aes(x = as.factor(MSC_1), 
-                   y = (PRICE))) +
+                   y = PRICE)) +
   #scale_color_discrete(labels = c("BAP", "Others")) + 
   #guides(color = guide_legend(title = NULL)) +
   # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
   #                                  hjust = 1, size = 12)) +
-  scale_x_discrete(labels = c("MSC", "non-MSC")) +
+  scale_x_discrete(breaks = c(1, 2), 
+                   labels = c("MSC", "non-MSC")) +
   labs(x = "", title = "P. jordani") + 
-  geom_text(data = p.dif.gt.0.df,
-            aes(x = 1, 
-                y = max(P.jordani.data$PRICE), 
-                label = signif(p, 2)))
+   geom_text(data = sample.size,
+            aes(x = as.factor(MSC_1), 
+                y = (ceiling(max(P.jordani.data$PRICE)) + 5),
+                label = n),
+            size = 3)  
+  # geom_text(data = data.frame(mu.dif.P.jordani),
+  #           aes(x = as.factor(1), 
+  #               y = max(P.jordani.data$PRICE) + 5, 
+  #               label = signif),
+  #           size = 10)
 
 ```
 
+NO diffrence was found between the mean prices of *P. Jordani* between with and without MSC labels. 
 
 
 ## B.	MBA - white shrimp. L. setiferus  (only one size; fresh, wild caught US & Canada)
@@ -895,14 +1098,15 @@ main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
                           ifelse((MBA == 1 | MBA == 2), 1, 2)))  -> L.setiferus.data
 
 # find which levels are available as pairs:
-L.setiferus.data %>% 
-  filter(MBA_1_2 == 1) %>%
-  summarize(n = n()) -> MBA_L.setiferus_1.summary
+# L.setiferus.data %>% 
+#   filter(MBA_1_2 == 1) %>%
+#   summarize(n = n()) -> MBA_L.setiferus_1.summary
+# 
+# L.setiferus.data %>% 
+#   filter(MBA_1_2 == 2) %>%
+#   summarize(n = n()) -> MBA_L.setiferus_2.summary
 
-L.setiferus.data %>% 
-  filter(MBA_1_2 == 2) %>%
-  summarize(n = n()) -> MBA_L.setiferus_2.summary
-
+L.setiferus.data %>% group_by(MBA_1_2, DSPPGRP) %>% summarize(n = n()) -> sample.size 
 
 ```
 
@@ -931,29 +1135,38 @@ if (!file.exists("RData/L_setiferus_test_results.rds")){
   BESTout.L.setiferus <- readRDS("RData/L_setiferus_test_results.rds")
 }
 
-p.dif.gt.0 <- summary(BESTout.L.setiferus)["muDiff", "%>compVal"] * 0.01
+mu.dif.L.setiferus <- summary(BESTout.L.setiferus)["muDiff", c("median", "HDIlo", "HDIup")]
 
-p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+mu.dif.L.setiferus$signif <- as.numeric(signif.fun(mu.dif.L.setiferus))
+
 ```
 
 
-```{r L_setiferus_tests_MBA_plot, echo=FALSE}
+```{r L_setiferus_tests_MBA_plot, echo=FALSE, fig.width=8, fig.height=6, fig.cap="Comparison of the price of L.setiferus between those with and without MBA 1&2 labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
 
 ggplot(L.setiferus.data) +
   geom_boxplot(aes(x = as.factor(MBA_1_2), 
-                   y = (PRICE))) +
+                   y = PRICE)) +
   #scale_color_discrete(labels = c("BAP", "Others")) + 
   #guides(color = guide_legend(title = NULL)) +
   # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
   #                                  hjust = 1, size = 12)) +
   scale_x_discrete(labels = c("MBA 1&2", "Other")) +
   labs(x = "", title = "L. setiferus") + 
-  geom_text(data = p.dif.gt.0.df,
-            aes(x = 1, 
-                y = max(L.setiferus.data$PRICE), 
-                label = signif(p, 2)))
+  geom_text(data = sample.size,
+            aes(x = as.factor(MBA_1_2), 
+                y = (ceiling(max(L.setiferus.data$PRICE)) + 5),
+                label = n),
+            size = 3)  
+# geom_text(data = data.frame(mu.dif.L.setiferus),
+#             aes(x = 1, 
+#                 y = max(L.setiferus.data$PRICE), 
+#                 label = signif))
 
 ```
+
+The mean price of *L. setiferus* was higher for MBA certified products. 
+
 
 ## C.	Fair Trade – white and blue shrimp; not giant size; fresh, wild; Del Pacifico product
 Northen white shrimp (*Litopenaeus setiferus*) and blue shrimp (*Litopenaeus stylirostris*). What is "Del Pacifico product"? 
@@ -970,14 +1183,15 @@ main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
   mutate(EL_1 = ifelse(is.na(ECOLABEL_f), 2, 1)) -> L.setiferus.FairTrade.data
 
 # find which levels are available as pairs:
-L.setiferus.FairTrade.data %>% 
-  filter(EL_1 == 1) %>%
-  summarize(n = n()) ->L.setiferus.FairTrade_1.summary
+# L.setiferus.FairTrade.data %>% 
+#   filter(EL_1 == 1) %>%
+#   summarize(n = n()) ->L.setiferus.FairTrade_1.summary
+# 
+# L.setiferus.FairTrade.data %>% 
+#   filter(EL_1 == 2) %>%
+#   summarize(n = n()) -> L.setiferus.FairTrade_2.summary
 
-L.setiferus.FairTrade.data %>% 
-  filter(EL_1 == 2) %>%
-  summarize(n = n()) -> L.setiferus.FairTrade_2.summary
-
+L.setiferus.FairTrade.data %>% group_by(EL_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
 
 ```
 
@@ -1006,29 +1220,42 @@ if (!file.exists("RData/L_setiferus_FairTrade_test_results.rds")){
   BESTout.L.setiferus.FairTrade <- readRDS("RData/L_setiferus_FairTrade_test_results.rds")
 }
 
-p.dif.gt.0 <- summary(BESTout.L.setiferus.FairTrade)["muDiff", "%>compVal"] * 0.01
+mu.dif.L.setiferus.FairTrade <- summary(BESTout.L.setiferus.FairTrade)["muDiff", 
+                                                                       c("median", "HDIlo", "HDIup")]
 
-p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+mu.dif.L.setiferus.FairTrade$signif <- as.numeric(signif.fun(mu.dif.L.setiferus.FairTrade))
+
+# p.dif.gt.0 <- summary(BESTout.L.setiferus.FairTrade)["muDiff", "%>compVal"] * 0.01
+# 
+# p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
 ```
 
 
-```{r L_setiferus_tests_FairTrade_plot, echo=FALSE}
+```{r L_setiferus_tests_FairTrade_plot, echo=FALSE, fig.width=8, fig.height=6, fig.cap = "Comparison of the price of L.setiferus between those with fair-trade lables and those without. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
 
 ggplot(L.setiferus.FairTrade.data) +
   geom_boxplot(aes(x = as.factor(EL_1), 
-                   y = (PRICE))) +
+                   y = PRICE)) +
   #scale_color_discrete(labels = c("BAP", "Others")) + 
   #guides(color = guide_legend(title = NULL)) +
   # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
   #                                  hjust = 1, size = 12)) +
   scale_x_discrete(labels = c("Fair trade", "Other")) +
   labs(x = "", title = "L. setiferus") + 
-  geom_text(data = p.dif.gt.0.df,
-            aes(x = 1, 
-                y = max(L.setiferus.FairTrade.data$PRICE), 
-                label = signif(p, 2)))
+  geom_text(data = sample.size,
+            aes(x = as.factor(EL_1), 
+                y = (ceiling(max(L.setiferus.FairTrade.data$PRICE)) + 5),
+                label = n),
+            size = 3)  
+# geom_text(data = data.frame(mu.dif.L.setiferus.FairTrade),
+#             aes(x = 1, 
+#                 y = max(L.setiferus.FairTrade.data$PRICE), 
+#                 label = signif))
 
 ```
+
+The mean price of *L. setiferus* was higher for fair-trace certified products. 
+
 
 
 ## D.	BAP whiteleg shrimp (farmed)
@@ -1042,14 +1269,15 @@ main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
   mutate(BAP_1 = ifelse(is.na(BAP), 2, 1)) -> L.vannamei.BAP.data
 
 # find which levels are available as pairs:
-L.vannamei.BAP.data %>% 
-  filter(BAP_1 == 1) %>%
-  summarize(n = n()) ->L.vannamei.BAP_1.summary
+# L.vannamei.BAP.data %>% 
+#   filter(BAP_1 == 1) %>%
+#   summarize(n = n()) ->L.vannamei.BAP_1.summary
+# 
+# L.vannamei.BAP.data %>% 
+#   filter(BAP_1 == 2) %>%
+#   summarize(n = n()) -> L.vannamei.BAP_2.summary
 
-L.vannamei.BAP.data %>% 
-  filter(BAP_1 == 2) %>%
-  summarize(n = n()) -> L.vannamei.BAP_2.summary
-
+L.vannamei.BAP.data %>% group_by(BAP_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
 
 ```
 
@@ -1078,30 +1306,41 @@ if (!file.exists("RData/L_vannamei_BAP_test_results.rds")){
   BESTout.L.bannamei_BAP <- readRDS("RData/L_vannamei_BAP_test_results.rds")
 }
 
-p.dif.gt.0 <- summary(BESTout.L.setiferus.FairTrade)["muDiff", "%>compVal"] * 0.01
+mu.dif.L.bannamei_BAP <- summary(BESTout.L.bannamei_BAP)["muDiff", 
+                                                         c("median", "HDIlo", "HDIup")]
 
-p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+mu.dif.L.bannamei_BAP$signif <- as.numeric(signif.fun(mu.dif.L.bannamei_BAP))
+
+# p.dif.gt.0 <- summary(BESTout.L.setiferus.FairTrade)["muDiff", "%>compVal"] * 0.01
+# 
+# p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
 ```
 
 
-```{r BAP_L_vannamei_test_plot, echo=FALSE}
+```{r BAP_L_vannamei_test_plot, echo=FALSE, fig.width=8, fig.height=6, fig.cap = "Comparison of the price of L.setiferus between those with BAP lables and those without. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
 
 ggplot(L.vannamei.BAP.data) +
   geom_boxplot(aes(x = as.factor(BAP_1), 
-                   y = (PRICE))) +
+                   y = PRICE)) +
   #scale_color_discrete(labels = c("BAP", "Others")) + 
   #guides(color = guide_legend(title = NULL)) +
   # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
   #                                  hjust = 1, size = 12)) +
   scale_x_discrete(labels = c("BAP", "Other")) +
   labs(x = "", title = "L. vannamei") + 
-  geom_text(data = p.dif.gt.0.df,
-            aes(x = 1, 
-                y = max(L.vannamei.BAP.data$PRICE), 
-                label = signif(p, 2)))
+  geom_text(data = sample.size,
+            aes(x = as.factor(BAP_1), 
+                y = (ceiling(max(L.vannamei.BAP.data$PRICE)) + 5),
+                label = n),
+            size =3)  
+  # geom_text(data = data.frame(mu.dif.L.bannamei_BAP),
+  #           aes(x = 1, 
+  #               y = max(L.vannamei.BAP.data$PRICE), 
+  #               label = signif))
 
 ```
 
+The mean price of *L. vannamei* was higher for BAP certified products. 
 
 ## E.	BAP giant tiger prawn (farmed)
 Please compare price/lb of the same species, size and fresh/farmed with & w/o these labels
@@ -1116,14 +1355,7 @@ main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
   filter(is.na(MBA))  %>% # remove BAP certified
   mutate(BAP_1 = ifelse(is.na(BAP), 2, 1)) -> P.monodon.BAP.data
 
-# find which levels are available as pairs:
-P.monodon.BAP.data %>% 
-  filter(BAP_1 == 1) %>%
-  summarize(n = n()) ->P.monodon.BAP_1.summary
-
-P.monodon.BAP.data %>% 
-  filter(BAP_1 == 2) %>%
-  summarize(n = n()) -> P.monodon.BAP_2.summary
+P.monodon.BAP.data %>% group_by(BAP_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
 
 ```
 
@@ -1153,36 +1385,47 @@ if (!file.exists("RData/P_monodon_BAP_test_results.rds")){
   BESTout.P.monodon_BAP <- readRDS("RData/P_monodon_BAP_test_results.rds")
 }
 
-p.dif.gt.0 <- summary(BESTout.P.monodon_BAP)["muDiff", "%>compVal"] * 0.01
+mu.dif.P.monodon_BAP <- summary(BESTout.P.monodon_BAP)["muDiff", 
+                                                       c("median", "HDIlo", "HDIup")]
 
-p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+mu.dif.P.monodon_BAP$signif <- as.numeric(signif.fun(mu.dif.P.monodon_BAP))
+
+# p.dif.gt.0 <- summary(BESTout.P.monodon_BAP)["muDiff", "%>compVal"] * 0.01
+# 
+# p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
 ```
 
 
-```{r BAP_P_monodon_test_plot, echo=FALSE}
+```{r BAP_P_monodon_test_plot, echo=FALSE, fig.width=8, fig.height=6, fig.cap = "Comparison of the price of P. monodon between those with BAP lables and those without. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
 
 ggplot(P.monodon.BAP.data) +
   geom_boxplot(aes(x = as.factor(BAP_1), 
-                   y = (PRICE))) +
+                   y = PRICE)) +
   #scale_color_discrete(labels = c("BAP", "Others")) + 
   #guides(color = guide_legend(title = NULL)) +
   # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
   #                                  hjust = 1, size = 12)) +
   scale_x_discrete(labels = c("BAP", "Other")) +
   labs(x = "", title = "P. monodon") + 
-  geom_text(data = p.dif.gt.0.df,
-            aes(x = 1, 
-                y = max(P.monodon.BAP.data$PRICE), 
-                label = signif(p, 2)))
+  geom_text(data = sample.size,
+            aes(x = as.factor(BAP_1), 
+                y = (ceiling(max(P.monodon.BAP.data$PRICE)) + 5),
+                label = n),
+            size = 3)  
+  # geom_text(data = data.frame(mu.dif.P.monodon_BAP),
+  #           aes(x = 1, 
+  #               y = max(P.monodon.BAP.data$PRICE), 
+  #               label = signif))
 
 ```
 
+No difference was found in the mean price of *P. monodon* with or without BAP labels. 
 
 # 3.	Litopenaeus (white or whiteleg shrimp) - price for wild-ecolabel; wild-no ecolabel; farmed- ecolabel; farmed-no ecolabel. 
 *Litopenaeus setiferus* and *Litopenaeus vannamei*
 
 Wild ecolabel vs. Wild no ecolabel vs. farmed ecolabel vs. farmed no ecolabel
-```{r Litopenaeus_data, echo=FALSE}
+```{r Litopenaeus_data, echo=FALSE, include=FALSE}
 main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
          SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
          SPECIES, MBA, MSC, BAP, PROD_METHOD, ECOLABEL, WILD, FARMED) %>%
@@ -1197,21 +1440,8 @@ main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
                              ifelse((WILD_I == 0 & ECOLABEL_I == 1), 3, 4)))) -> Litopenaeus.data
 
 # sample sizes for different groups:
-Litopenaeus.data %>% 
-  filter(GRP == 1) %>%
-  summarize(n = n()) ->Litopenaeus_data_1.summary
-
-Litopenaeus.data %>% 
-  filter(GRP == 2) %>%
-  summarize(n = n()) -> Litopenaeus_data_2.summary
-
-Litopenaeus.data %>% 
-  filter(GRP == 3) %>%
-  summarize(n = n()) ->Litopenaeus_data_3.summary
-
-Litopenaeus.data %>% 
-  filter(GRP == 4) %>%
-  summarize(n = n()) -> Litopenaeus_data_4.summary
+Litopenaeus.data %>% group_by(GRP) %>%
+  summarize(n = n()) -> Litopenaeus.n
 
 # Need to put PRICE and GRP in a long format:
 Litopenaeus.data %>% select(PRICE, GRP) %>%
@@ -1223,70 +1453,50 @@ Litopenaeus.long$GRP_f <- as.factor(Litopenaeus.long$GRP)
 
 Litopenaeus.long$ID <- seq(from = 1, to = nrow(Litopenaeus.long))
 
-tmp <- BANOVA.Normal(l1_formula = PRICE ~ GRP_f, 
-                     data = data.frame(Litopenaeus.long),
-                     id = Litopenaeus.long$ID,
-                     l1_hyper = c(1, 1, 1))
+if (!file.exists("RData/Litopenaeus_BANOVA_out.rds")){
+  Litopenaeus.BANOVA <- BANOVA.Normal(l1_formula = PRICE ~ GRP_f, 
+                                      data = data.frame(Litopenaeus.long),
+                                      id = Litopenaeus.long$ID,
+                                      l1_hyper = c(1, 1, 1))
+  saveRDS(tmp, file = "RData/Litopenaeus_BANOVA_out.rds")
+} else {
+  Litopenaeus.BANOVA <- readRDS("RData/Litopenaeus_BANOVA_out.rds")
+}
+
   
 ```
 
 
+```{r Litopenaeus_plot, echo=FALSE, warning=FALSE, fig.width=8, fig.height=6, fig.cap = "Comparison of the price of P. monodon between those with BAP lables and those without. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
 
-```{r Litopenaeus_data_test, echo=FALSE, include=FALSE, cache=TRUE}
-
-if (!file.exists("RData/Litopenaeus_test_results.rds")){
-
-    Litopenaeus.data %>% filter(GRP == 1) %>% 
-      pull(PRICE) -> y1
-    
-    Litopenaeus.data %>% filter(GRP == 2) %>% 
-      pull(PRICE) -> y2
-    
-    Litopenaeus.data %>% filter(GRP == 3) %>% 
-      pull(PRICE) -> y3
-    
-    Litopenaeus.data %>% filter(GRP == 4) %>% 
-      pull(PRICE) -> y4
-    
-    
-    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
-      BESTout.P.monodon_BAP <- BESTmcmc(y1, y2,
-                                    numSavedSteps = 10000,
-                                    burnInSteps = 5000,
-                                    thinSteps = 5,
-                                    parallel = TRUE)
-      
-      
-    }
-  saveRDS(BESTout.P.monodon_BAP, "RData/Litopenaeus_test_results.rds")
-} else {
-  BESTout.P.monodon_BAP <- readRDS("RData/Litopenaeus_test_results.rds")
-}
-
-p.dif.gt.0 <- summary(BESTout.P.monodon_BAP)["muDiff", "%>compVal"] * 0.01
-
-p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
-```
-
-
-```{r BAP_P_monodon_test_plot, echo=FALSE}
-
-ggplot(P.monodon.BAP.data) +
-  geom_boxplot(aes(x = as.factor(BAP_1), 
-                   y = (PRICE))) +
-  #scale_color_discrete(labels = c("BAP", "Others")) + 
-  #guides(color = guide_legend(title = NULL)) +
-  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
-  #                                  hjust = 1, size = 12)) +
-  scale_x_discrete(labels = c("BAP", "Other")) +
-  labs(x = "", title = "P. monodon") + 
-  geom_text(data = p.dif.gt.0.df,
-            aes(x = 1, 
-                y = max(P.monodon.BAP.data$PRICE), 
-                label = signif(p, 2)))
+ggplot() + 
+  geom_boxplot(data = Litopenaeus.long, 
+               aes(x = GRP_f, y = PRICE)) + 
+  scale_x_discrete(breaks = c(1, 2, 3, 4),
+                   labels = c("wild/ecolabel", "wild/no-ecolable", 
+                              "farmed/ecolabel", "farmed/no-ecolabel")) + 
+  geom_text(data = Litopenaeus.n, 
+            aes(x = GRP, 
+                y = ceiling(max(Litopenaeus.long$PRICE)) + 5,
+                label = n),
+            size = 3) + 
+  labs(x = "", y = "Price", title = "Litopenaeus")
 
 ```
+
+Differences among the four groups were all significant.  
 
 # 4.	Shrimp by processing
 All penaeid shrimp - Filter by processing “head on”, “headless”, “tail on”, “tail off”, and “cooked”
 	Please compare price/lb 
+
+```{r}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+                     SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+                     SPECIES, FAMILY, MBA, MSC, BAP, PROD_METHOD, ECOLABEL, WILD, FARMED,
+                     SHRIMP_PROCESSING) %>% 
+  filter(FAMILY == "Penaeidae") -> tmp
+   #-> Penaeid.data
+```
+
+
