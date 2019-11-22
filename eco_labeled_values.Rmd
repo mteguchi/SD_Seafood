@@ -329,6 +329,7 @@ mu.dif.MSC$DSPPGRP <- common.levels
 
 ```
 
+
 ```{r plot_MSC, echo=FALSE, warning = FALSE,fig.width=8, fig.height=6, fig.cap="Comparison of the price of seafood products between those with and without MSC. Y axis is in the base 10 logarithmic scale.  A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR.  Symbols on top indicate whether the mean for MBA labels was greater (+), smaller (-), or not different (.) from those without the labels for each group. Values indicate the sample sizes."}
 
 ggplot(MSC.data) +

@@ -1,0 +1,575 @@
+---
+title: "Examination of the value of eco-labeled products"
+output: word_document
+---
+
+```{r setup, include=FALSE, echo=FALSE}
+rm(list=ls())
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(BEST)   # for Bayesian t tests
+library(BANOVA)  # Bayesian ANOVAs
+
+signif.fun <- function(x) return(ifelse((x[2] < 0 & x[3] < 0), "-",
+                                        ifelse((x[2] < 0 & x[3] > 0), ".",
+                                               ifelse((x[2] > 0 & x[3] > 0), "+"))))
+
+get.dif.stats <- function(x){
+  mu.dif.lo <- unlist(lapply(x, 
+                             FUN = function(x) {return(ifelse(!is.null(x), 
+                                                              summary(x)["muDiff", "HDIlo"], 
+                                                              NA))})) 
+  
+  mu.dif.up <- unlist(lapply(x, 
+                             FUN = function(x) {return(ifelse(!is.null(x), 
+                                                              summary(x)["muDiff", "HDIup"], 
+                                                              NA))}) )
+  
+  mu.dif.median <- unlist(lapply(x, 
+                                 FUN = function(x) {return(ifelse(!is.null(x), 
+                                                                  summary(x)["muDiff", "median"], 
+                                                                  NA))}) )
+  
+  
+  mu.dif.df <- data.frame(median = mu.dif.median, 
+                          HDIlo = mu.dif.lo, 
+                          HDIup = mu.dif.up)
+
+  mu.dif <-   apply(mu.dif.df, 
+                    MARGIN = 1, 
+                    FUN = signif.fun)
+  
+  # mu.dif <- apply(mu.dif.df, 
+  #                 MARGIN = 1, 
+  #                 FUN = function(x){return(ifelse((x[2] < 0 & x[3] < 0), -1,
+  #                                                 ifelse((x[2] < 0 & x[3] > 0), 0,
+  #                                                        ifelse((x[2] > 0 & x[3] > 0), 1))))})
+  
+  mu.dif.df$signif <- mu.dif     
+  return(mu.dif.df)
+  
+}
+```
+
+Categorical comparisons – product (with eco-label attribute) vs price
+
+```{r get_data, echo=FALSE, include=FALSE}
+col.def <- cols("YEAR" = col_integer(),
+                "MONTH" = col_integer(),
+                "DAY" = col_integer(),
+                "DATE" = col_date(format = "%m/%d/%y"),
+                "ZIP" = col_integer(),
+                "LATITUDE" = col_double(),
+                "LONGITUDE" = col_double(),
+                "MKT_NAME" = col_character(),
+                "MARKETNAME" = col_integer(),
+                "MARKETTYPE" = col_integer(),
+                "FULL_LABEL" = col_character(),
+                "COMMON_NAME" = col_character(),
+                "LENGTH_CM" = col_double(),
+                "FOODGRP" = col_character(),
+                "SPP_GROUP" = col_character(),
+                "DSPPGRP" = col_integer(),
+                "SPECIES" = col_character(),
+                "FAMILY" = col_character(),
+                "TL" = col_double(),
+                "K_YR" = col_double(),
+                "PRICE" = col_double(),
+                "DCOUNTRY" = col_integer(),
+                "COUNTRY" = col_character(),
+                "DCONDITION" = col_integer(),
+                "CONDITION" = col_character(),
+                "PRODUCT_TYPE" = col_character(),
+                "BRAND_NAME" = col_character(),
+                "PROD_METHOD" = col_integer(),
+                "KEYWORD" = col_character(),
+                "ECOLABEL" = col_character(),
+                "SFW_RATING" = col_integer(),
+                "WILD" = col_integer(),
+                "FARMED" = col_integer(),
+                "FRESH" = col_integer(),
+                "HVINVERT" = col_integer(),
+                "SHRIMP" = col_integer(),
+                "LOCAL" = col_integer(),
+                "LIVE" = col_integer(),
+                "SUSHI" = col_integer(),
+                "RESPONSIBLE" = col_integer(),
+                "MSC" = col_integer(),
+                "SUSTAINABLE" = col_integer(),
+                "MBA" = col_integer(),
+                "MBA_CARD" = col_integer(),
+                "MBA_APP" = col_integer(),
+                "BAP" = col_integer(),
+                "DBAPSTARS" = col_integer(),
+                "BAP_LEVEL" = col_character(),
+                "REGION" = col_character(),
+                "GEAR" = col_character(),
+                "SIZE_CLASS" = col_character(),
+                "SHRIMP_PROCESSING" = col_character(),
+                "DPROCCOUNTRY" = col_integer(),
+                "PROCESSING_COUNTRY" = col_character(),
+                "HACCP" = col_integer(),
+                "SIZE_GROUP" = col_character(),
+                "DOLPHIN_SAFE" = col_character(),
+                "OTHER_TEXT" = col_character(),
+                "GF" = col_character(),
+                "O3" = col_character(),
+                "NONGMO" = col_integer(),
+                "SUSTAIN-" = col_integer(),
+                "TRAC-" = col_integer(),
+                "USA STATE" = col_character())
+
+main.data <- read_csv(file = "data/SDSEAFOOD_Master_02042019_2.csv",
+                      col_types = col.def)
+
+# Bring in the keys:
+# key_country <- read.csv(file = "data/SDSEAFOOD_KEY_DCOUNTRY_02012019_1.csv")
+# key_condition <- read.csv(file = "data/SDSEAFOOD_KEY_DCONDITION_02012019_1.csv")
+# key_food.grp <- read.csv(file = "data/SDSEAFOOD_KEY_DFOODGRP_02012019_1.csv")
+# key_market.name <- read.csv(file = "data/SDSEAFOOD_KEY_DMARKETNAME_02012019_1.csv")
+# key_market.type <- read.csv(file = "data/SDSEAFOOD_KEY_DMARKETTYPE_02012019_1.csv")
+# key_MBA <- read.csv(file = "data/SDSEAFOOD_KEY_DMBA_X_02012019_1.csv")
+# key_spp.grp <- read.csv(file = "data/SDSEAFOOD_KEY_DSPPGRP_02012019_1.csv")
+
+```
+
+
+# 2.	What is the price of eco-labeled shrimp vs non-ecolabeled shrimp? 
+Filter by: 
+
+## A.	MSC - tiny shrimp, P. jordani (these are size tiny, fresh, wild-caught US and Canada) 
+
+```{r P_jordani_data, echo=F}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP, PROD_METHOD, SIZE_GROUP, CONDITION, ECOLABEL) %>%
+  filter((SPECIES == "Pandalus jordani" | SPECIES == "Pandalus spp.") & 
+           PROD_METHOD == 1 & 
+           SIZE_GROUP == "Tiny" & 
+           (CONDITION == "CKD" | CONDITION == "FZ-SH CKD")) %>%
+#  mutate(MSC_1 = ifelse(ECOLABEL == "MSC", 1, 2)) -> P.jordani.data
+  mutate(MSC_1 = ifelse(is.na(MSC), 2, 1)) -> P.jordani.data
+
+P.jordani.data %>% group_by(MSC_1) %>% summarize(n = n()) -> sample.size 
+
+```
+
+
+```{r P_jordani_tests_MSC, echo=F, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/P_jordani_MSC_test_results.rds")){
+
+    P.jordani.data %>% filter(MSC_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    P.jordani.data %>% filter(MSC_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.P.jordani <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.P.jordani, "RData/P_jordani_MSC_test_results.rds")
+} else {
+  BESTout.P.jordani <- readRDS("RData/P_jordani_MSC_test_results.rds")
+}
+
+mu.dif.P.jordani <- summary(BESTout.P.jordani)["muDiff", 
+                                               c("mean", "median", "HDIlo", "HDIup")]
+
+#mu.dif.P.jordani$signif <- signif.fun(mu.dif.P.jordani)
+
+plot(BESTout.P.jordani)
+
+```
+
+A diffrence was found between the mean prices of *P. Jordani* between with and without MSC labels, where the mean difference in the means was ```r signif(mu.dif.P.jordani["mean"], 4)``` and its 95% CI [```r signif(mu.dif.P.jordani["HDIlo"], 4)```, ```r signif(mu.dif.P.jordani["HDIup"], 4)```]. 
+
+
+```{r P_jordani_tests_MSC_plot, echo=FALSE, warning=FALSE, message=F, fig.width=8, fig.height=6, fig.cap="Comparison of the price of P. jordani between those with and without MSC labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
+
+p.1 <- ggplot(P.jordani.data) +
+  geom_boxplot(aes(x = as.factor(MSC_1), 
+                   y = PRICE)) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(breaks = c(1, 2), 
+                   labels = c("MSC", "non-MSC")) +
+  labs(x = "", title = "P. jordani")  
+   # geom_text(data = sample.size,
+   #          aes(x = as.factor(MSC_1),
+   #              y = (ceiling(max(P.jordani.data$PRICE)) + 5),
+   #              label = n),
+   #          size = 3) 
+  # geom_text(data = data.frame(mu.dif.P.jordani),
+  #           aes(x = as.factor(1),
+  #               y = max(P.jordani.data$PRICE) + 5,
+  #               label = signif),
+  #           size = 10)
+
+ggsave(p.1, filename = "figures/MSC_P_jordani.png",
+       device = "png", dpi = 600)
+
+p.1
+```
+
+
+
+## B.	MBA - white shrimp. L. setiferus  (only one size; fresh, wild caught US & Canada)
+
+```{r MBA_L_setiferus, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP, FAMILY, SIZE_GROUP, PRODUCT_TYPE, 
+         PROD_METHOD, CONDITION, ECOLABEL) %>%
+  filter(FAMILY == "Penaeidae") %>%
+  filter(SIZE_GROUP == "Jumbo" | SIZE_GROUP == "Extra Jumbo" | SIZE_GROUP == "Colossal") %>%
+  filter(PRODUCT_TYPE == "HL") %>%
+  #filter(DCONDITION == 3 | DCONDITION == 9 | DCONDITION == 2) %>% 
+  filter(CONDITION == "FRESH" | CONDITION == "PF" | CONDITION == "R-CASE") %>%
+  filter(PROD_METHOD == 1) %>%
+  # filter(SPECIES == "Litopenaeus setiferus" | SPECIES == "Farfantepenaeus duorarun") %>%
+  #filter(is.na(MSC))  %>% # remove MSC certified
+  #filter(is.na(BAP))  %>% # remove BAP certified
+  mutate(MBA_1_2 = ifelse(is.na(ECOLABEL), 2,
+                          ifelse(ECOLABEL == "MBAY", 1, 2)))  -> L.setiferus.data
+  # mutate(MBA_1_2 = ifelse(is.na(MBA), 2, 
+  #                         ifelse((MBA == 1 | MBA == 2), 1, 2)))  -> L.setiferus.data
+
+L.setiferus.data %>% group_by(MBA_1_2) %>% summarize(n = n()) -> sample.size 
+
+```
+
+
+```{r MBA_L_setiferus_test, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/L_setiferus_test_results.rds")){
+
+    L.setiferus.data %>% filter(MBA_1_2 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    L.setiferus.data %>% filter(MBA_1_2 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.L.setiferus <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.L.setiferus, "RData/L_setiferus_test_results.rds")
+} else {
+  BESTout.L.setiferus <- readRDS("RData/L_setiferus_test_results.rds")
+}
+
+mu.dif.L.setiferus <- summary(BESTout.L.setiferus)["muDiff", c("mean", "median", "HDIlo", "HDIup")]
+
+#mu.dif.L.setiferus$signif <- as.numeric(signif.fun(mu.dif.L.setiferus))
+
+plot(BESTout.L.setiferus)
+```
+
+The mean price of Penaeidae was higher for MBA certified products, where the mean difference in the means was ```r signif(mu.dif.L.setiferus["mean"], 4)``` and its 95% CI [```r signif(mu.dif.L.setiferus["HDIlo"], 4)```, ```r signif(mu.dif.L.setiferus["HDIup"],4)```].  
+
+```{r L_setiferus_tests_MBA_plot, echo=FALSE, message = F, fig.width=8, fig.height=6, fig.cap="Comparison of the price of L.setiferus between those with and without MBA 1&2 labels. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
+
+p.2 <- ggplot(L.setiferus.data) +
+  geom_boxplot(aes(x = as.factor(MBA_1_2), 
+                   y = PRICE)) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("MBA 1&2", "Other")) +
+  labs(x = "", title = "Penaeidae") #+ 
+  # geom_text(data = sample.size,
+  #           aes(x = as.factor(MBA_1_2), 
+  #               y = (ceiling(max(L.setiferus.data$PRICE)) + 5),
+  #               label = n),
+  #           size = 3)  
+# geom_text(data = data.frame(mu.dif.L.setiferus),
+#             aes(x = 1, 
+#                 y = max(L.setiferus.data$PRICE), 
+#                 label = signif))
+
+ggsave(p.2, filename = "figures/MBA_Penaeidae.png",
+       device = "png", dpi = 600)
+
+p.2
+
+```
+
+
+
+## C.	Fair Trade – white and blue shrimp; not giant size; fresh, wild; Del Pacifico product
+Northen white shrimp (*Litopenaeus setiferus*) and blue shrimp (*Litopenaeus stylirostris*). What is "Del Pacifico product"? 
+
+```{r FairTrade_L_setiferus, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+                     SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+                     SPECIES, ECOLABEL, MBA, MSC, BAP, FAMILY, SIZE_GROUP,
+                     PROD_METHOD, CONDITION) %>%
+  mutate(ECOLABEL_f = as.factor(ECOLABEL)) %>%
+  filter(FAMILY == "Penaeidae") %>%
+  filter(SIZE_GROUP == "Jumbo" | SIZE_GROUP == "Medium") %>%
+  #filter(DCONDITION == 5) %>% 
+  filter(CONDITION == "FZ-SH") %>%
+  filter(PROD_METHOD == 1) %>%
+  mutate(EL_1 = ifelse(is.na(ECOLABEL_f), 2, 1)) -> L.setiferus.FairTrade.data
+
+# find which levels are available as pairs:
+# L.setiferus.FairTrade.data %>% 
+#   filter(EL_1 == 1) %>%
+#   summarize(n = n()) ->L.setiferus.FairTrade_1.summary
+# 
+# L.setiferus.FairTrade.data %>% 
+#   filter(EL_1 == 2) %>%
+#   summarize(n = n()) -> L.setiferus.FairTrade_2.summary
+
+L.setiferus.FairTrade.data %>% group_by(EL_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
+
+```
+
+
+```{r FairTrade_L_setiferus_FairTrade_test, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/L_setiferus_FairTrade_test_results.rds")){
+
+    L.setiferus.FairTrade.data %>% filter(EL_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    L.setiferus.FairTrade.data %>% filter(EL_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.L.setiferus.FairTrade <- BESTmcmc(y1, y2,
+                                                numSavedSteps = 10000,
+                                                burnInSteps = 5000,
+                                                thinSteps = 5,
+                                                parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.L.setiferus.FairTrade, "RData/L_setiferus_FairTrade_test_results.rds")
+} else {
+  BESTout.L.setiferus.FairTrade <- readRDS("RData/L_setiferus_FairTrade_test_results.rds")
+}
+
+mu.dif.L.setiferus.FairTrade <- summary(BESTout.L.setiferus.FairTrade)["muDiff", 
+                                                                       c("mean", "median", "HDIlo", "HDIup")]
+
+#mu.dif.L.setiferus.FairTrade$signif <- as.numeric(signif.fun(mu.dif.L.setiferus.FairTrade))
+
+# p.dif.gt.0 <- summary(BESTout.L.setiferus.FairTrade)["muDiff", "%>compVal"] * 0.01
+# 
+# p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+plot(BESTout.L.setiferus.FairTrade)
+```
+
+The mean price of Penaeidae was higher for fair-trace certified products, where the mean difference in the means was ```r signif(mu.dif.L.setiferus.FairTrade["mean"], 4)``` and its 95% CI [```r signif(mu.dif.L.setiferus.FairTrade["HDIlo"], 4)```, ```r signif(mu.dif.L.setiferus.FairTrade["HDIup"], 4)```].  
+
+
+```{r L_setiferus_tests_FairTrade_plot, echo=FALSE, message = F, fig.width=8, fig.height=6, fig.cap = "Comparison of the price of L.setiferus between those with fair-trade lables and those without. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
+
+p.3 <- ggplot(L.setiferus.FairTrade.data) +
+  geom_boxplot(aes(x = as.factor(EL_1), 
+                   y = PRICE)) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("Fair trade", "Other")) +
+  labs(x = "", title = "Penaeidae")  
+  # geom_text(data = sample.size,
+  #           aes(x = as.factor(EL_1), 
+  #               y = (ceiling(max(L.setiferus.FairTrade.data$PRICE)) + 5),
+  #               label = n),
+  #           size = 3)  
+# geom_text(data = data.frame(mu.dif.L.setiferus.FairTrade),
+#             aes(x = 1, 
+#                 y = max(L.setiferus.FairTrade.data$PRICE), 
+#                 label = signif))
+
+ggsave(p.3, filename = "figures/FairTrade_Penaeidae.png",
+       device = "png", dpi = 600)
+
+p.3
+
+
+```
+
+
+## E.	BAP giant tiger prawn (farmed)
+Please compare price/lb of the same species, size and fresh/farmed with & w/o these labels
+
+*Penaeus monodon*
+```{r P_monodon_data, echo=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP, PROD_METHOD, FAMILY) %>%
+  filter(SPECIES == "Penaeus monodon") %>%
+  filter(PROD_METHOD == 2) %>%
+  #filter(is.na(MSC))  %>% # remove MSC certified
+  #filter(is.na(MBA))  %>% # remove BAP certified
+  mutate(BAP_1 = ifelse(is.na(BAP), 2, 1)) -> P.monodon.BAP.data
+
+P.monodon.BAP.data %>% group_by(BAP_1, DSPPGRP) %>% summarize(n = n()) -> sample.size 
+
+```
+
+
+
+```{r BAP_P_monodon_test, echo=FALSE, include=FALSE, cache=TRUE}
+
+if (!file.exists("RData/P_monodon_BAP_test_results.rds")){
+
+    P.monodon.BAP.data %>% filter(BAP_1 == 1) %>% 
+      pull(PRICE) -> y1
+    
+    P.monodon.BAP.data %>% filter(BAP_1 == 2) %>% 
+      pull(PRICE) -> y2
+    
+    if (var(y1) > 0 & var(y2) > 0 & !is.na(var(y1)) & !is.na(var(y2))){
+      BESTout.P.monodon_BAP <- BESTmcmc(y1, y2,
+                                    numSavedSteps = 10000,
+                                    burnInSteps = 5000,
+                                    thinSteps = 5,
+                                    parallel = TRUE)
+      
+      
+    }
+  saveRDS(BESTout.P.monodon_BAP, "RData/P_monodon_BAP_test_results.rds")
+} else {
+  BESTout.P.monodon_BAP <- readRDS("RData/P_monodon_BAP_test_results.rds")
+}
+
+mu.dif.P.monodon_BAP <- summary(BESTout.P.monodon_BAP)["muDiff", 
+                                                       c("mean", "median", "HDIlo", "HDIup")]
+
+#mu.dif.P.monodon_BAP$signif <- as.numeric(signif.fun(mu.dif.P.monodon_BAP))
+
+# p.dif.gt.0 <- summary(BESTout.P.monodon_BAP)["muDiff", "%>compVal"] * 0.01
+# 
+# p.dif.gt.0.df <- data.frame(p = p.dif.gt.0)
+plot(BESTout.P.monodon_BAP)
+```
+
+
+No difference was found in the mean price of *P. monodon* with or without BAP labels, where the mean difference in the means was ```r signif(mu.dif.P.monodon_BAP["mean"], 4)``` and its 95% CI [```r signif(mu.dif.P.monodon_BAP["HDIlo"], 4)```, ```r signif(mu.dif.P.monodon_BAP["HDIup"], 4)```].. 
+
+
+```{r BAP_P_monodon_test_plot, echo=FALSE, message = F, fig.width=8, fig.height=6, fig.cap = "Comparison of the price of P. monodon between those with BAP lables and those without. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
+
+p.4 <- ggplot(P.monodon.BAP.data) +
+  geom_boxplot(aes(x = as.factor(BAP_1), 
+                   y = PRICE)) +
+  #scale_color_discrete(labels = c("BAP", "Others")) + 
+  #guides(color = guide_legend(title = NULL)) +
+  # theme(axis.text.x = element_text(angle = 90, vjust = 0.5, 
+  #                                  hjust = 1, size = 12)) +
+  scale_x_discrete(labels = c("BAP", "Other")) +
+  labs(x = "", title = "P. monodon") + 
+  geom_text(data = sample.size,
+            aes(x = as.factor(BAP_1), 
+                y = (ceiling(max(P.monodon.BAP.data$PRICE)) + 5),
+                label = n),
+            size = 3)  
+  # geom_text(data = data.frame(mu.dif.P.monodon_BAP),
+  #           aes(x = 1, 
+  #               y = max(P.monodon.BAP.data$PRICE), 
+  #               label = signif))
+
+ggsave(p.4, filename = "figures/P_monodon.png",
+       device = "png", dpi = 600)
+
+p.4
+
+
+```
+
+
+# 3.	Litopenaeus (white or whiteleg shrimp) - price for wild-ecolabel; wild-no ecolabel; farmed- ecolabel; farmed-no ecolabel. 
+*Litopenaeus setiferus* and *Litopenaeus vannamei*
+
+Wild ecolabel vs. Wild no ecolabel vs. farmed ecolabel vs. farmed no ecolabel
+```{r Litopenaeus_data, echo=FALSE, include=FALSE}
+main.data %>% select(DATE, ZIP, LATITUDE, LONGITUDE, MKT_NAME,
+         SPP_GROUP, DSPPGRP, PRICE, COUNTRY, DCONDITION, SHRIMP,
+         SPECIES, MBA, MSC, BAP, PROD_METHOD, ECOLABEL, WILD, FARMED, FAMILY) %>%
+  filter(FAMILY == "Penaeidae") %>%
+  mutate(ECOLABEL_2 = ifelse(ECOLABEL == "LOCAL", NA, ECOLABEL)) %>%
+  #filter(SPECIES == "Litopenaeus setiferus" | 
+  #         SPECIES == "Litopenaeus vannamei") %>%
+  mutate(ECOLABEL_I = ifelse(is.na(ECOLABEL_2), 0, 1),
+         WILD_I = ifelse(is.na(WILD), 0, 1),
+         FARMED_I = ifelse(is.na(FARMED), 0, 1)) %>%
+  filter(WILD_I == 1 | FARMED_I == 1) %>%
+  mutate(GRP = ifelse((WILD_I == 1 & ECOLABEL_I == 1), 1,   # wild and ecolabel
+                      ifelse((WILD_I == 1 & ECOLABEL_I == 0), 2,   # wild and non-ecolabel
+                             ifelse((WILD_I == 0 & ECOLABEL_I == 1), 3, 4)))) -> Litopenaeus.data
+
+# sample sizes for different groups:
+Litopenaeus.data %>% group_by(GRP) %>%
+  summarize(n = n()) -> Litopenaeus.n
+
+# Need to put PRICE and GRP in a long format:
+Litopenaeus.data %>% select(PRICE, GRP) %>%
+  #mutate(GRP_f = as.factor(GRP)) %>%
+  gather(GRP, PRICE) %>%
+  mutate(GRP_f = as.factor(GRP)) -> Litopenaeus.long
+
+Litopenaeus.long$GRP_f <- as.factor(Litopenaeus.long$GRP)
+
+Litopenaeus.long$ID <- seq(from = 1, to = nrow(Litopenaeus.long))
+
+if (!file.exists("RData/Litopenaeus_BANOVA_out.rds")){
+  Litopenaeus.BANOVA <- BANOVA.Normal(l1_formula = PRICE ~ GRP_f, 
+                                      data = data.frame(Litopenaeus.long),
+                                      id = Litopenaeus.long$ID,
+                                      l1_hyper = c(1, 1, 1))
+  saveRDS(Litopenaeus.BANOVA, file = "RData/Litopenaeus_BANOVA_out.rds")
+} else {
+  Litopenaeus.BANOVA <- readRDS("RData/Litopenaeus_BANOVA_out.rds")
+}
+
+  
+```
+
+Means were different among the four groups, where they significant at the Bayesian p value < 0.0001.   
+
+
+```{r Litopenaeus_plot, echo=FALSE, warning=FALSE, message = F, fig.width=8, fig.height=6, fig.cap = "Comparison of the price of P. monodon between those with BAP lables and those without. A box indicates 25 to 75 percentiles of data, the horizontal line within each box indicates the mean, whiskers indicate 1.5 times the interquartile range (25 - 75 percentiles) percentiles and dots indicate those outside of the IQR. Values indicate the sample sizes."}
+
+p.5 <- ggplot() + 
+  geom_boxplot(data = Litopenaeus.long, 
+               aes(x = GRP_f, y = PRICE)) + 
+  scale_x_discrete(breaks = c(1, 2, 3, 4),
+                   labels = c("wild/ecolabel", "wild/no-ecolable", 
+                              "farmed/ecolabel", "farmed/no-ecolabel")) + 
+  # geom_text(data = Litopenaeus.n, 
+  #           aes(x = GRP, 
+  #               y = ceiling(max(Litopenaeus.long$PRICE)) + 5,
+  #               label = n),
+  #           size = 3) + 
+  labs(x = "", y = "Price", title = "Penaeidae")
+
+ggsave(p.5, filename = "figures/Wild_Ecolabel_Penaeidae.png",
+       device = "png", dpi = 600)
+
+p.5
+
+```
+
+
+
